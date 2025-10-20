@@ -1,0 +1,66 @@
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# Database
+sqlalchemy==2.0.34
+psycopg2-binary==2.9.9
+
+# Data Validation
+pydantic==2.9.2
+email-validator==2.1.0
+
+# HTTP Client
+httpx==0.27.2
+
+# Configuration
+python-dotenv==1.0.1
+
+# ML Core
+scikit-learn==1.5.2
+pandas==2.2.3
+numpy==2.1.2
+joblib==1.4.2
+
+# ML Models
+xgboost==2.1.1
+lightgbm==4.5.0
+catboost==1.2.7
+
+# MLflow for Model Management
+mlflow==2.16.2
+
+# Anomaly Detection
+pyod==2.0.2  # Comprehensive anomaly detection library
+hdbscan==0.8.38  # Density-based clustering
+
+# Feature Importance & Explainability
+shap==0.45.1
+eli5==0.13.0
+
+# Imbalanced Learning
+imbalanced-learn==0.12.4
+
+# Optional: Sentiment Analysis (Hugging Face)
+transformers==4.45.2
+torch==2.4.1
+sentencepiece==0.2.0
+
+# Rate Limiting
+aiolimiter==1.1.0
+ratelimit==2.2.1
+
+# LLM & RAG Framework
+langchain==0.1.20
+langchain-community==0.0.38
+langchain-core==0.1.52
+sentence-transformers==2.7.0
+
+# Vector Store
+chromadb==0.4.24
+faiss-cpu==1.8.0
+
+# Document Processing
+pypdf==4.2.0
+python-docx==1.1.0

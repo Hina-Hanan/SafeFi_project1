@@ -1,0 +1,82 @@
+# DeFi Risk Assessment Project Rules
+
+## Code Quality Standards
+- Write production-ready code with comprehensive error handling
+- Include type hints for all Python functions and TypeScript interfaces
+- Use descriptive variable names and avoid abbreviations
+- Add detailed docstrings and JSDoc comments for all public APIs
+- Implement proper logging with structured format (JSON in production)
+- Never use placeholder comments - implement complete functionality
+- Write tests for all business logic and API endpoints
+
+## Architecture Patterns
+- Use dependency injection for database sessions and services
+- Implement repository pattern for data access layers
+- Use service layer for business logic separation
+- Apply async/await patterns consistently for I/O operations
+- Use proper error boundaries and loading states in React components
+- Implement caching strategies for frequently accessed data
+
+## Database Best Practices
+- Use UUID primary keys for all entities
+- Include audit fields (created_at, updated_at, created_by)
+- Implement proper indexing for query performance
+- Use database migrations for schema changes
+- Add foreign key constraints and referential integrity
+- Use connection pooling and prepared statements
+
+## API Design Standards
+- Follow RESTful conventions with proper HTTP status codes
+- Use consistent response formats: {data: {...}, meta: {...}}
+- Implement comprehensive input validation and sanitization
+- Add pagination for list endpoints with limit/offset
+- Include proper CORS headers and security middleware
+- Use OpenAPI/Swagger documentation with examples
+
+## Frontend Standards
+- Use TypeScript strict mode with explicit return types
+- Implement responsive design with mobile-first approach
+- Use React Query for server state management
+- Add proper loading states and error boundaries
+- Follow Material-UI design system consistently
+- Implement accessibility features (ARIA labels, keyboard navigation)
+
+## Security Requirements
+- Sanitize all user inputs and API parameters
+- Use parameterized queries to prevent SQL injection
+- Implement rate limiting and request throttling
+- Store sensitive data encrypted (passwords, API keys)
+- Use HTTPS/TLS for all communications
+- Add CSRF protection for state-changing operations
+
+## Performance Optimization
+- Use database indexes for frequently queried columns
+- Implement caching for expensive computations and API calls
+- Use compression for API responses and static assets
+- Optimize database queries to avoid N+1 problems
+- Use CDN for static content delivery
+- Implement lazy loading for large datasets
+
+## Testing Requirements
+- Write unit tests for all business logic functions
+- Create integration tests for API endpoints
+- Add end-to-end tests for critical user workflows
+- Use pytest for Python tests with descriptive test names
+- Mock external API calls in tests
+- Achieve minimum 80% code coverage
+
+## ML/Data Science Standards
+- Use MLflow for experiment tracking and model versioning
+- Implement proper data validation and feature engineering
+- Add model monitoring and drift detection
+- Use version control for datasets and model artifacts
+- Document model assumptions and limitations
+- Implement A/B testing framework for model comparison
+
+## Deployment & DevOps
+- Use environment variables for all configuration
+- Implement health checks for all services
+- Add comprehensive monitoring and alerting
+- Use infrastructure as code (CloudFormation/Terraform)
+- Implement CI/CD pipelines with automated testing
+- Add database backup and disaster recovery procedures
