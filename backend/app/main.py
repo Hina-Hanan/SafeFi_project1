@@ -54,7 +54,7 @@ def create_app() -> FastAPI:
 
     # Mount API router FIRST (provides dependency injection of DB via dependencies parameter when needed in subroutes)
     # This includes the proper /health endpoint from health.py
-    app.include_router(api_router, prefix="")
+    app.include_router(api_router, prefix="/api/v1")
 
     return app
 
