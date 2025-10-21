@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class ORMConfig(BaseModel):
-    model_config = dict(from_attributes=True)
+    model_config = dict(from_attributes=True, protected_namespaces=())
 
 
 class ProtocolOut(ORMConfig):

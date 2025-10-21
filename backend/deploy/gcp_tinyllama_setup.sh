@@ -74,8 +74,9 @@ curl -fsSL https://ollama.ai/install.sh | sh
 echo -e "${GREEN}[8/12] Pulling TinyLlama model (1.1GB)...${NC}"
 ollama pull tinyllama
 
-echo -e "${GREEN}[9/12] Pulling embedding model...${NC}"
+echo -e "${GREEN}[9/12] Pulling embedding model (all-minilm)...${NC}"
 ollama pull all-minilm
+echo "Note: Using all-minilm instead of nomic-embed-text for GCP efficiency"
 
 echo -e "${GREEN}[10/12] Configuring Ollama service...${NC}"
 sudo tee /etc/systemd/system/ollama.service > /dev/null << EOF

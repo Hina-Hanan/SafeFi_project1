@@ -20,6 +20,7 @@ def health(db: Session = Depends(get_db)) -> dict:
     total_protocols = 0
     total_metrics = 0
     total_risk_scores = 0
+    total_tvl_usd = 0.0
     
     try:
         # Test database connection with a simple query
@@ -30,9 +31,26 @@ def health(db: Session = Depends(get_db)) -> dict:
         total_metrics = db.scalar(select(func.count()).select_from(ProtocolMetric)) or 0
         total_risk_scores = db.scalar(select(func.count()).select_from(RiskScore)) or 0
         
+        # Calculate total TVL from latest metrics for each protocol
+        if total_protocols > 0:
+            # Simple approach: get latest TVL for each protocol
+            protocol_ids = [p.id for p in db.query(Protocol).all()]
+            total_tvl_usd = 0.0
+            
+            for protocol_id in protocol_ids:
+                latest_metric = (
+                    db.query(ProtocolMetric)
+                    .filter(ProtocolMetric.protocol_id == protocol_id)
+                    .filter(ProtocolMetric.tvl.isnot(None))
+                    .order_by(ProtocolMetric.timestamp.desc())
+                    .first()
+                )
+                if latest_metric and latest_metric.tvl:
+                    total_tvl_usd += float(latest_metric.tvl)
+        
         # If we got here, database is connected
         database_connected = True
-        logger.info(f"Health check: DB connected, {total_protocols} protocols")
+        logger.info(f"Health check: DB connected, {total_protocols} protocols, ${total_tvl_usd:,.0f} total TVL")
         
     except Exception as e:
         # Log the error details
@@ -50,6 +68,7 @@ def health(db: Session = Depends(get_db)) -> dict:
         "total_protocols": total_protocols,
         "total_metrics": total_metrics,
         "total_risk_scores": total_risk_scores,
+        "total_tvl_usd": total_tvl_usd,
     }
 
 
@@ -62,10 +81,28 @@ def get_system_metrics(db: Session = Depends(get_db)) -> dict:
         total_metrics = db.scalar(select(func.count()).select_from(ProtocolMetric))
         total_risk_scores = db.scalar(select(func.count()).select_from(RiskScore))
         
+        # Calculate total TVL from latest metrics for each protocol
+        total_tvl_usd = 0.0
+        if total_protocols and total_protocols > 0:
+            # Simple approach: get latest TVL for each protocol
+            protocol_ids = [p.id for p in db.query(Protocol).all()]
+            
+            for protocol_id in protocol_ids:
+                latest_metric = (
+                    db.query(ProtocolMetric)
+                    .filter(ProtocolMetric.protocol_id == protocol_id)
+                    .filter(ProtocolMetric.tvl.isnot(None))
+                    .order_by(ProtocolMetric.timestamp.desc())
+                    .first()
+                )
+                if latest_metric and latest_metric.tvl:
+                    total_tvl_usd += float(latest_metric.tvl)
+        
         return {
             "total_protocols": total_protocols or 0,
             "total_metrics": total_metrics or 0,
             "total_risk_scores": total_risk_scores or 0,
+            "total_tvl_usd": total_tvl_usd,
             "timestamp": datetime.utcnow().isoformat(),
         }
     except Exception as e:
@@ -76,6 +113,7 @@ def get_system_metrics(db: Session = Depends(get_db)) -> dict:
             "total_protocols": 0,
             "total_metrics": 0,
             "total_risk_scores": 0,
+            "total_tvl_usd": 0.0,
             "timestamp": datetime.utcnow().isoformat(),
         }
 

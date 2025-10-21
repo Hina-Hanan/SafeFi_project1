@@ -43,9 +43,6 @@ eli5==0.13.0
 imbalanced-learn==0.12.4
 
 # Optional: Sentiment Analysis (Hugging Face)
-transformers==4.45.2
-torch==2.4.1
-sentencepiece==0.2.0
 
 # Rate Limiting
 aiolimiter==1.1.0

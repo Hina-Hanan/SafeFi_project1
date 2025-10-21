@@ -9,24 +9,23 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from typing import List, Optional
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+from app.core.config import settings
+
 logger = logging.getLogger("app.services.email_alert")
 
 class EmailAlertService:
     """Service for sending email alerts about protocol risks."""
     
     def __init__(self):
-        self.smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.sender_email = os.getenv("ALERT_SENDER_EMAIL", "hinahanan2003@gmail.com")
-        self.sender_password = os.getenv("ALERT_SENDER_PASSWORD", "")
-        self.enabled = os.getenv("EMAIL_ALERTS_ENABLED", "false").lower() == "true"
+        self.smtp_host = settings.smtp_host
+        self.smtp_port = settings.smtp_port
+        self.sender_email = settings.alert_sender_email
+        self.sender_password = settings.alert_sender_password
+        self.enabled = settings.email_alerts_enabled
         
         if not self.sender_password and self.enabled:
-            logger.warning("Email alerts enabled but ALERT_SENDER_PASSWORD not set")
+            logger.warning("Email alerts enabled but ALERT_SENDER_PASSWORD not set in environment")
     
     def send_risk_alert(
         self,

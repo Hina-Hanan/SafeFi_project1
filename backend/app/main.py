@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.database.connection import get_db
 from app.api.router import api_router
+from app.startup import lifespan
 
 
 def _configure_logging() -> None:
@@ -23,7 +24,11 @@ logger = logging.getLogger("app.main")
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="DeFi Risk Assessment API", version="1.0.0")
+    app = FastAPI(
+        title="DeFi Risk Assessment API",
+        version="1.0.0",
+        lifespan=lifespan
+    )
 
     # CORS
     allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")

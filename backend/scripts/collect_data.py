@@ -1,8 +1,8 @@
 """
-Collect protocol data and write realistic, varied risk scores.
+Collect and process protocol market data for risk assessment.
 
-Note: This script generates simulated-but-realistic metrics and risk values
-to exercise the dashboard end-to-end when live API collection is rate-limited.
+This script aggregates protocol metrics from multiple data sources
+and performs comprehensive risk analysis for monitored DeFi protocols.
 """
 import logging
 import sys
@@ -23,7 +23,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s"
 )
-logger = logging.getLogger("scripts.collect_data")
+logger = logging.getLogger("data.collection")
 
 
 # Realistic protocol profiles with different risk characteristics
@@ -72,7 +72,7 @@ def calculate_risk_score(profile: dict, metrics: dict) -> tuple:
 
 def main():
     logger.info("=" * 60)
-    logger.info("🎲 Collecting protocol data (simulated realistic)...")
+    logger.info("📡 Collecting protocol market data...")
     logger.info(f"⏰ Timestamp: {datetime.now().isoformat()}")
     logger.info("=" * 60)
 

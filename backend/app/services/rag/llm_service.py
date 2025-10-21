@@ -84,7 +84,12 @@ class RAGLLMService:
         """
         if self.vector_store_manager.vectorstore is None:
             logger.info("Vector store not initialized, creating...")
-            initialize_vector_store(db)
+            try:
+                initialize_vector_store(db)
+                logger.info("Vector store initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize vector store: {e}")
+                raise
     
     def retrieve_context(self, query: str, k: int = settings.rag_top_k) -> List[Document]:
         """

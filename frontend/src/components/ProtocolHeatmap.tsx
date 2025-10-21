@@ -61,6 +61,12 @@ export default function ProtocolHeatmap({ onProtocolSelect }: ProtocolHeatmapPro
     return scoreB - scoreA;
   });
 
+  // Calculate total TVL from all protocols
+  const totalTvl = protocols.reduce((sum, protocol) => {
+    const tvl = protocol.latest_metrics?.tvl_usd || 0;
+    return sum + tvl;
+  }, 0);
+
   return (
     <Box>
       <Box sx={{ mb: 3 }}>
@@ -78,9 +84,20 @@ export default function ProtocolHeatmap({ onProtocolSelect }: ProtocolHeatmapPro
           variant="body2"
           sx={{
             color: colors.textGray,
+            mb: 2,
           }}
         >
           Click on any protocol card to view detailed risk analysis
+        </Typography>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 600,
+            color: colors.white,
+            mb: 2,
+          }}
+        >
+          Total TVL: ${totalTvl.toLocaleString()}
         </Typography>
       </Box>
 

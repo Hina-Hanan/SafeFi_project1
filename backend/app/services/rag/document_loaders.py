@@ -133,7 +133,7 @@ class DatabaseDocumentLoader:
                 lines.append(f"- Volatility Score: {risk.volatility_score:.2f}")
             if risk.liquidity_score:
                 lines.append(f"- Liquidity Score: {risk.liquidity_score:.2f}")
-            lines.append(f"- Model Version: {risk.model_version}")
+            # Model version stored in metadata only, not shown to LLM
         
         return "\n".join(lines)
     

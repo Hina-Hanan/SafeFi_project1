@@ -27,6 +27,7 @@ import RiskThresholdSettings from './RiskThresholdSettings';
 import ActiveRiskAlerts from './ActiveRiskAlerts';
 import PortfolioAnalyzer from './PortfolioAnalyzer';
 import AIAssistantChat from './AIAssistantChat';
+import EmailSubscription from './EmailSubscription';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -281,6 +282,7 @@ export default function SimpleDashboard() {
               <Tab label="🔥 Risk Heatmap" sx={{ fontWeight: 600 }} />
               <Tab label="📊 7-Day Analysis" sx={{ fontWeight: 600 }} />
               <Tab label="💼 Portfolio" sx={{ fontWeight: 600 }} />
+              <Tab label="📧 Email Alerts" sx={{ fontWeight: 600 }} />
               <Tab label="🤖 AI Assistant" sx={{ fontWeight: 600 }} />
             </Tabs>
           </Box>
@@ -298,6 +300,10 @@ export default function SimpleDashboard() {
           </TabPanel>
 
           <TabPanel value={selectedTab} index={3}>
+            <EmailSubscription />
+          </TabPanel>
+
+          <TabPanel value={selectedTab} index={4}>
             <AIAssistantChat />
           </TabPanel>
         </Paper>
@@ -333,6 +339,16 @@ export default function SimpleDashboard() {
             >
               <Chip 
                 label={`${health.total_protocols || 0} Protocols`}
+                size="small"
+                sx={{
+                  background: '#0A0A0A',
+                  border: '2px solid #666666',
+                  fontWeight: 600,
+                  color: '#FFFFFF',
+                }}
+              />
+              <Chip 
+                label={`$${(health.total_tvl_usd || 0).toLocaleString()} Total TVL`}
                 size="small"
                 sx={{
                   background: '#0A0A0A',

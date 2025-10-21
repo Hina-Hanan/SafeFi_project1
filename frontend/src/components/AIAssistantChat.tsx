@@ -45,13 +45,17 @@ interface LLMQueryResponse {
 }
 
 const fetchLLMHealth = async (): Promise<LLMHealthResponse> => {
-  const { data } = await api.get<LLMHealthResponse>('/api/v1/llm/health');
+  const { data } = await api.get<LLMHealthResponse>('/llm/health');
   return data;
 };
 
 const queryLLM = async (query: string): Promise<LLMQueryResponse> => {
-  const { data } = await api.post<LLMQueryResponse>('/api/v1/llm/query', { query });
+  const { data } = await api.post<LLMQueryResponse>('/llm/query', { query });
   return data;
+};
+
+const initializeVectorStore = async (): Promise<void> => {
+  await api.post('/llm/initialize');
 };
 
 export default function AIAssistantChat() {
@@ -244,10 +248,31 @@ export default function AIAssistantChat() {
             border: `2px solid ${colors.red}`,
             color: colors.white,
           }}
+          action={
+            !health?.vector_store_initialized && health?.ollama_available && (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={async () => {
+                  try {
+                    await initializeVectorStore();
+                    refetchHealth();
+                  } catch (error) {
+                    console.error('Failed to initialize vector store:', error);
+                  }
+                }}
+                sx={{
+                  border: `2px solid ${colors.white}`,
+                  fontWeight: 600,
+                }}
+              >
+                Initialize Now
+              </Button>
+            )
+          }
         >
-          {!health?.ollama_available && 'LLM service unavailable. '}
-          {!health?.vector_store_initialized && 'Vector store not initialized. '}
-          Please check backend logs.
+          {!health?.ollama_available && 'LLM service unavailable. Run: ollama serve'}
+          {health?.ollama_available && !health?.vector_store_initialized && 'Vector store not initialized. Click "Initialize Now" or restart backend.'}
         </Alert>
       )}
 

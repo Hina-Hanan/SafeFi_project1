@@ -107,13 +107,46 @@ const RiskTrendsChart: React.FC<RiskTrendsChartProps> = ({
   }
 
   // Prepare data for chart
-  const chartData = historyData.map((item: any) => ({
-    date: new Date(item.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    time: new Date(item.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-    riskScore: (item.risk_score * 100).toFixed(1),
-    riskScoreNum: item.risk_score * 100,
-    riskLevel: item.risk_level,
-  })).reverse(); // Reverse to show oldest first
+  const allData = historyData.map((item: any) => {
+    const timestamp = new Date(item.timestamp);
+    return {
+      date: timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      fullDate: timestamp.toISOString().split('T')[0], // For grouping by day
+      time: timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: timestamp.getTime(),
+      riskScore: (item.risk_score * 100).toFixed(1),
+      riskScoreNum: item.risk_score * 100,
+      riskLevel: item.risk_level,
+    };
+  }).reverse(); // Reverse to show oldest first
+
+  // Group by date and take average risk score per day for cleaner chart
+  const dataByDate = allData.reduce((acc: any, item: any) => {
+    const dateKey = item.fullDate;
+    if (!acc[dateKey]) {
+      acc[dateKey] = {
+        date: item.date,
+        fullDate: item.fullDate,
+        timestamp: item.timestamp,
+        riskScores: [],
+      };
+    }
+    acc[dateKey].riskScores.push(item.riskScoreNum);
+    return acc;
+  }, {});
+
+  // Calculate average for each day
+  const chartData = Object.values(dataByDate).map((day: any) => {
+    const avgRiskScore = day.riskScores.reduce((sum: number, score: number) => sum + score, 0) / day.riskScores.length;
+    return {
+      date: day.date,
+      fullDate: day.fullDate,
+      timestamp: day.timestamp,
+      riskScore: avgRiskScore.toFixed(1),
+      riskScoreNum: avgRiskScore,
+      dataPoints: day.riskScores.length,
+    };
+  }).sort((a: any, b: any) => a.timestamp - b.timestamp); // Sort by timestamp
 
   // Calculate trend
   const currentScore = chartData[chartData.length - 1]?.riskScoreNum || 0;
@@ -315,7 +348,8 @@ const RiskTrendsChart: React.FC<RiskTrendsChartProps> = ({
                 }}
                 labelStyle={{ color: '#e2e8f0', fontWeight: 'bold' }}
                 itemStyle={{ color: '#6366f1' }}
-                formatter={(value: any) => [`${value}%`, 'Risk Score']}
+                formatter={(value: any) => [`${Number(value).toFixed(1)}%`, 'Risk Score']}
+                labelFormatter={(label: any) => `Date: ${label}`}
               />
               <Legend 
                 wrapperStyle={{ paddingTop: '20px' }}

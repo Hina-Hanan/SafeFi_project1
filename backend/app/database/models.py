@@ -123,3 +123,29 @@ class Alert(Base, TimestampMixin):
     protocol: Mapped["Protocol"] = relationship("Protocol")
 
 
+class EmailSubscriber(Base, TimestampMixin):
+    """Email subscribers for risk alert notifications."""
+    __tablename__ = "email_subscribers"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=default_uuid, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Alert preferences
+    high_risk_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=70.0)
+    medium_risk_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=40.0)
+    notify_on_high: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notify_on_medium: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    
+    # Subscription metadata
+    verification_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    unsubscribe_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_alert_sent: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    __table_args__ = (
+        Index("ix_email_subscribers_email", "email"),
+        Index("ix_email_subscribers_active", "is_active"),
+    )
+
+
