@@ -19,8 +19,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
-import { api } from '../services/api';
-import { fetchRiskHistoryResilient } from '../services/api';
+import { api, fetchProtocolRiskHistory, fetchRiskHistoryResilient } from '../services/api';
 
 interface RiskTrendsChartProps {
   protocolId: string;
@@ -37,7 +36,7 @@ const RiskTrendsChart: React.FC<RiskTrendsChartProps> = ({
     queryKey: ['riskHistory', protocolId, days],
     queryFn: async () => {
       try {
-        const arr = await api.getRiskHistory(protocolId, days)
+        const arr = await fetchProtocolRiskHistory(protocolId, days)
         if (arr && arr.length) return arr
       } catch (_) {}
       // fallback to resilient helper with a neutral base

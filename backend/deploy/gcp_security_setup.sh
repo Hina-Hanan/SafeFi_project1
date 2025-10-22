@@ -266,3 +266,7 @@ echo "  - Update logs: tail -f /opt/defi-risk-assessment/logs/auto_update.log"
 echo "  - Monitor logs: tail -f /opt/defi-risk-assessment/logs/monitor.log"
 echo ""
 
+
+
+
+

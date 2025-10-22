@@ -1,6 +1,24 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
+// Determine API base URL based on environment
+const getApiBaseUrl = () => {
+  // Check for explicit environment variable
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL
+  if (envUrl) return envUrl
+  
+  // Check if we're in production (deployed)
+  const isProduction = (import.meta as any).env?.PROD
+  
+  if (isProduction) {
+    // In production, use the custom domain
+    return 'https://api.safefi.live'
+  } else {
+    // Local development
+    return 'http://127.0.0.1:8000'
+  }
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
