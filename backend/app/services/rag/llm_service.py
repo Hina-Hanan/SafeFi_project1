@@ -6,6 +6,7 @@ Uses LangChain for orchestration.
 """
 
 import logging
+import os
 from typing import List, AsyncGenerator, Optional
 
 from langchain_core.prompts import PromptTemplate
@@ -19,18 +20,21 @@ from app.services.rag.vector_store import get_vector_store_manager, initialize_v
 logger = logging.getLogger(__name__)
 
 
-# System prompt template for RAG
-RAG_PROMPT_TEMPLATE = """You are an AI assistant for a DeFi (Decentralized Finance) Risk Assessment platform. 
-You help users understand protocol risks, metrics, and market data.
+# System prompt template for RAG with strict guardrails
+RAG_PROMPT_TEMPLATE = """You are the AI assistant for the SafeFi DeFi Risk Assessment project.
 
-Use the following context from our database to answer the question. If you don't know the answer based on the context, say so - don't make up information.
+STRICT SCOPE: Only answer questions about this project, its APIs, data, models, deployment, or DeFi-risk concepts relevant to it.
+
+If a question is outside scope or you are unsure, reply exactly: "I don't know."
+
+Use the following context from our database to answer the question. If you don't know the answer based on the context, say "I don't know" - don't make up information.
 
 Context:
 {context}
 
 Question: {question}
 
-Answer: Provide a clear, concise answer based on the context above. Include specific numbers and data points when available. If asked about protocols, mention their risk levels and key metrics."""
+Answer: Provide a clear, concise answer based ONLY on the context above. Include specific numbers and data points when available. If asked about protocols, mention their risk levels and key metrics. If the context doesn't contain relevant information, say "I don't know.""""
 
 
 class RAGLLMService:
@@ -47,7 +51,7 @@ class RAGLLMService:
         temperature: float = settings.ollama_temperature,
     ):
         """
-        Initialize RAG LLM service.
+        Initialize RAG LLM service with conservative parameters.
         
         Args:
             model: Ollama model name
@@ -56,10 +60,20 @@ class RAGLLMService:
         """
         self.model = model
         self.base_url = base_url
-        self.temperature = temperature
+        # Use conservative temperature by default
+        self.temperature = float(os.getenv("LLM_TEMPERATURE", str(temperature)))
+        
+        # Conservative generation options
+        self.generation_options = {
+            "temperature": self.temperature,
+            "top_p": float(os.getenv("LLM_TOP_P", "0.9")),
+            "top_k": int(os.getenv("LLM_TOP_K", "40")),
+            "num_ctx": int(os.getenv("LLM_NUM_CTX", "4096")),
+            "repeat_penalty": float(os.getenv("LLM_REPEAT_PENALTY", "1.1")),
+        }
         
         # Initialize Ollama LLM
-        logger.info(f"Initializing Ollama LLM: {model} at {base_url}")
+        logger.info(f"Initializing Ollama LLM: {model} at {base_url} with conservative settings")
         self.llm = Ollama(
             model=self.model,
             base_url=self.base_url,
@@ -208,7 +222,7 @@ class RAGLLMService:
                         "model": self.model,
                         "prompt": prompt,
                         "stream": True,
-                        "options": {"temperature": self.temperature},
+                        "options": self.generation_options,
                     },
                 ) as response:
                     response.raise_for_status()

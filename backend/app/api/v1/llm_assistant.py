@@ -6,6 +6,7 @@ Supports both streaming and non-streaming responses.
 """
 
 import logging
+import os
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,10 +17,28 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.services.rag.llm_service import get_llm_service, RAGLLMService
 from app.services.rag.vector_store import get_vector_store_manager, initialize_vector_store
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Guardrail configuration
+PROJECT_KEYWORDS = {
+    "safefi", "risk", "tvl", "protocol", "defi", "fastapi", "ollama", "faiss", 
+    "safefi.live", "api.safefi.live", "decentralized", "finance", "assessment",
+    "blockchain", "ethereum", "uniswap", "compound", "aave", "maker", "curve",
+    "liquidity", "yield", "farming", "staking", "governance", "token", "coin",
+    "risk score", "metrics"
+}
+
+SIMILARITY_THRESHOLD = settings.rag_similarity_threshold
+MIN_CONTEXT_DOCS = settings.rag_min_context_docs
+
+def is_in_scope(query: str) -> bool:
+    """Check if query is within project scope."""
+    query_lower = query.lower()
+    return any(keyword in query_lower for keyword in PROJECT_KEYWORDS)
 
 
 # Request/Response Models
@@ -35,6 +54,7 @@ class QueryResponse(BaseModel):
     answer: str = Field(..., description="Generated answer")
     context_used: int = Field(..., description="Number of context documents used")
     model: str = Field(..., description="Model used")
+    reason: Optional[str] = Field(default=None, description="Reason for refusal if applicable")
 
 
 class VectorStoreStatus(BaseModel):
@@ -187,12 +207,13 @@ async def query_llm(
     llm_service: RAGLLMService = Depends(get_llm_service),
 ) -> QueryResponse:
     """
-    Query LLM assistant with RAG (non-streaming).
+    Query LLM assistant with RAG (non-streaming) with strict guardrails.
     
     The assistant will:
-    1. Search the vector store for relevant context
-    2. Retrieve matching documents from database
-    3. Generate a response using the LLM with context
+    1. Check if query is within project scope
+    2. Search the vector store for relevant context
+    3. Filter by similarity threshold
+    4. Generate a response using the LLM with context
     
     Args:
         request: Query request with question and parameters
@@ -200,7 +221,7 @@ async def query_llm(
         llm_service: LLM service instance
     
     Returns:
-        Generated answer with metadata
+        Generated answer with metadata or refusal with reason
     
     Example:
         ```json
@@ -211,34 +232,84 @@ async def query_llm(
         ```
     """
     try:
-        # Ensure vector store is initialized
+        query = request.query.strip()
+        if not query:
+            return QueryResponse(
+                answer="I don't know.",
+                context_used=0,
+                model=llm_service.model,
+                reason="empty_query"
+            )
+        
+        # 1. Intent guard - check if query is in scope
+        if not is_in_scope(query):
+            logger.info(f"Query out of scope: {query[:100]}...")
+            return QueryResponse(
+                answer="I don't know.",
+                context_used=0,
+                model=llm_service.model,
+                reason="out_of_scope"
+            )
+        
+        # 2. Ensure vector store is initialized
         llm_service.ensure_vector_store(db)
         
-        # Retrieve relevant context
-        context_docs = llm_service.retrieve_context(request.query, k=request.top_k)
+        # 3. Retrieve relevant context
+        context_docs = llm_service.retrieve_context(query, k=request.top_k)
         
-        # Generate response
+        # 4. Filter by similarity threshold if docs have scores
+        filtered_docs = []
+        for doc in context_docs:
+            # Check if document has similarity score
+            if hasattr(doc, 'metadata') and 'score' in doc.metadata:
+                score = doc.metadata['score']
+                if score >= SIMILARITY_THRESHOLD:
+                    filtered_docs.append(doc)
+            else:
+                # If no score, include the document (assume it's relevant)
+                filtered_docs.append(doc)
+        
+        # 5. Check if we have enough relevant context
+        if len(filtered_docs) < MIN_CONTEXT_DOCS:
+            logger.info(f"Insufficient relevant context: {len(filtered_docs)} docs (min: {MIN_CONTEXT_DOCS})")
+            return QueryResponse(
+                answer="I don't know.",
+                context_used=len(filtered_docs),
+                model=llm_service.model,
+                reason="insufficient_context"
+            )
+        
+        # 6. Generate response with conservative parameters
         if request.temperature is not None:
             llm_service.llm.temperature = request.temperature
+        else:
+            # Use conservative default temperature from config
+            llm_service.llm.temperature = settings.llm_temperature
         
         answer = llm_service.generate_response(
-            query=request.query,
-            context_documents=context_docs,
+            query=query,
+            context_documents=filtered_docs,
             db=db,
         )
         
+        # 7. Post-process answer to ensure it's not hallucinating
+        if not answer or answer.strip().lower() in ["", "i don't know", "i don't know."]:
+            answer = "I don't know."
+        
         return QueryResponse(
             answer=answer,
-            context_used=len(context_docs),
+            context_used=len(filtered_docs),
             model=llm_service.model,
         )
     
     except Exception as e:
         logger.error(f"Query failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query failed: {str(e)}",
-        ) from e
+        return QueryResponse(
+            answer="I don't know.",
+            context_used=0,
+            model=getattr(llm_service, 'model', 'unknown'),
+            reason=f"error: {str(e)}"
+        )
 
 
 @router.post("/query/stream")

@@ -22,7 +22,7 @@ const API_BASE_URL = getApiBaseUrl()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000, // 120 seconds for LLM queries (TinyLlama can be slow)
+  timeout: 300000, // 5 minutes default timeout to accommodate LLM generation
 })
 
 // Generic response wrappers per backend standard
@@ -123,6 +123,19 @@ export const fetchModelPerformance = async () => {
 
 export const compareModelVersions = async (modelName: string) => {
   const { data } = await api.get(`/models/performance/${modelName}/versions`)
+  return data
+}
+
+// LLM endpoints
+export const fetchLlmHealth = async () => {
+  const { data } = await api.get('/llm/health', { timeout: 15000 })
+  return data
+}
+
+export const queryLlm = async (query: string, contextDocs?: unknown) => {
+  const payload: any = { query }
+  if (contextDocs !== undefined) payload.docs = contextDocs
+  const { data } = await api.post('/llm/query', payload, { timeout: 300000 })
   return data
 }
 

@@ -100,3 +100,5 @@ echo "   Open your frontend URL and check browser console"
 echo "   Mixed Content errors should be completely resolved!"
 
 
+
+
