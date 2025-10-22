@@ -33,7 +33,7 @@ mlflow==2.16.2
 
 # Anomaly Detection
 pyod==2.0.2  # Comprehensive anomaly detection library
-hdbscan==0.8.38  # Density-based clustering
+hdbscan==0.8.40  # Density-based clustering
 
 # Feature Importance & Explainability
 shap==0.45.1
