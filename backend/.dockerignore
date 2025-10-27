@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Virtual environment
+venv/
+env/
+
+# Testing
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
+.tox
+tests/
+
+# Logs
+logs/
+*.log
+
+# Documentation
+*.md
+README.md
+
+# Development
+scripts/
+*.bat
+*.sh
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

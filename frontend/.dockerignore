@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Testing
+coverage/
+
+# Documentation
+*.md
+README.md
+
+# Development
+*.bat
+*.sh
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

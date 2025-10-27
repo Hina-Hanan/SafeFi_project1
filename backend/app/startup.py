@@ -14,11 +14,12 @@ from sqlalchemy.orm import Session
 from app.database.connection import SessionLocal
 from app.services.rag.vector_store import initialize_vector_store, get_vector_store_manager
 from app.services.rag.llm_service import get_llm_service
+from app.services.automated_scheduler import get_scheduler
 
 logger = logging.getLogger(__name__)
 
 
-def initialize_services() -> None:
+async def initialize_services() -> None:
     """
     Initialize all backend services on startup.
     
@@ -26,6 +27,7 @@ def initialize_services() -> None:
     - Vector store for RAG
     - LLM service
     - Database connections
+    - Automated scheduler for data updates and alerts
     """
     logger.info("🚀 Initializing backend services...")
     
@@ -62,6 +64,15 @@ def initialize_services() -> None:
         except Exception as e:
             logger.error(f"❌ Failed to initialize LLM service: {e}")
         
+        # Initialize automated scheduler
+        try:
+            scheduler = get_scheduler()
+            await scheduler.start()
+            logger.info("✅ Automated scheduler started (15-30 minute intervals)")
+        except Exception as e:
+            logger.error(f"❌ Failed to start automated scheduler: {e}")
+            logger.warning("⚠️ Automatic updates and alerts will not run")
+        
         logger.info("✅ Backend services initialization completed")
         
     except Exception as e:
@@ -70,13 +81,21 @@ def initialize_services() -> None:
         db.close()
 
 
-def cleanup_services() -> None:
+async def cleanup_services() -> None:
     """
     Cleanup services on shutdown.
     """
     logger.info("🛑 Cleaning up backend services...")
     
     try:
+        # Stop automated scheduler
+        try:
+            scheduler = get_scheduler()
+            await scheduler.stop()
+            logger.info("✅ Automated scheduler stopped")
+        except Exception as e:
+            logger.error(f"❌ Error stopping scheduler: {e}")
+        
         # Get vector store manager
         manager = get_vector_store_manager()
         
@@ -102,7 +121,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 DeFi Risk Assessment Backend Starting Up")
     logger.info("=" * 50)
     
-    initialize_services()
+    await initialize_services()
     
     yield
     
@@ -111,6 +130,6 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 DeFi Risk Assessment Backend Shutting Down")
     logger.info("=" * 50)
     
-    cleanup_services()
+    await cleanup_services()
 
 

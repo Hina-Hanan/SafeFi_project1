@@ -16,6 +16,8 @@ import re
 from app.database.connection import get_db
 from app.database.models import EmailSubscriber, Protocol, RiskScore
 from app.services.email_alert_service import get_email_service
+from app.services.subscriber_alert_service import get_subscriber_alert_service
+from app.services.automated_scheduler import get_scheduler
 
 logger = logging.getLogger("app.api.v1.email_alerts")
 

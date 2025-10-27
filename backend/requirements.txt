@@ -48,6 +48,10 @@ imbalanced-learn==0.12.4
 aiolimiter==1.1.0
 ratelimit==2.2.1
 
+
+# Task Scheduling
+apscheduler==3.10.4
+
 # LLM & RAG Framework
 langchain==0.1.20
 langchain-community==0.0.38

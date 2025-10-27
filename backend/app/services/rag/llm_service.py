@@ -34,7 +34,7 @@ Context:
 
 Question: {question}
 
-Answer: Provide a clear, concise answer based ONLY on the context above. Include specific numbers and data points when available. If asked about protocols, mention their risk levels and key metrics. If the context doesn't contain relevant information, say "I don't know.""""
+Answer: Provide a clear, concise answer based ONLY on the context above. Include specific numbers and data points when available. If asked about protocols, mention their risk levels and key metrics. If the context doesn't contain relevant information, say "I don't know." """
 
 
 class RAGLLMService:

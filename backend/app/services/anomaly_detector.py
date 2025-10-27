@@ -5,8 +5,9 @@ Tests multiple anomaly detection algorithms:
 1. Isolation Forest (ensemble-based)
 2. Local Outlier Factor (density-based)
 3. One-Class SVM (boundary-based)
-4. DBSCAN (clustering-based)
-5. Autoencoder (deep learning-based)
+4. HBOS (histogram-based)
+5. KNN (distance-based)
+6. Autoencoder (deep learning-based)
 
 Automatically selects the best performing algorithm.
 """
@@ -101,6 +102,16 @@ class AnomalyDetector:
                 contamination=contamination,
                 n_neighbors=20,
                 method='largest'
+            ),
+            'autoencoder': AutoEncoder(
+                contamination=contamination,
+                epochs=100,
+                batch_size=32,
+                learning_rate=0.001,
+                hidden_neurons=[64, 32, 32, 64],  # Encoder-decoder architecture
+                activation='relu',
+                random_state=42,
+                verbose=0
             )
         }
         
@@ -302,6 +313,8 @@ class AnomalyDetector:
         self.contamination = data['contamination']
         self.algorithms_performance = data.get('performances', [])
         logger.info(f"Anomaly detector loaded from {filepath}: {self.best_algorithm_name}")
+
+
 
 
 

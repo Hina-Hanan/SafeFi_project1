@@ -127,7 +127,7 @@ class EmailSubscriber(Base, TimestampMixin):
     """Email subscribers for risk alert notifications."""
     __tablename__ = "email_subscribers"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=default_uuid, index=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=default_uuid, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

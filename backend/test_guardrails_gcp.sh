@@ -11,7 +11,7 @@ sudo systemctl restart defi-backend
 sleep 5
 
 # Check if backend is running
-if sudo systemctl is-active --quiet defi-backend; then
+if sudo systemctl is-active defi-backend; then
     echo "✅ Backend restarted successfully"
 else
     echo "❌ Backend failed to start"

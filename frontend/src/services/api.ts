@@ -22,7 +22,7 @@ const API_BASE_URL = getApiBaseUrl()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 5 minutes default timeout to accommodate LLM generation
+  timeout: 500000, // 8 minutes default timeout to accommodate LLM generation
 })
 
 // Generic response wrappers per backend standard
@@ -31,8 +31,11 @@ export interface ObjectResponse<T> { data: T; meta: Record<string, unknown> }
 
 // Protocol endpoints
 export const fetchProtocols = async () => {
-  const { data } = await api.get<any[]>('/protocols')
-  return data
+  const response = await api.get('/protocols')
+  // Handle different response shapes
+  if (Array.isArray(response.data)) return response.data
+  if (response.data?.data) return response.data.data
+  return response.data
 }
 
 export const fetchProtocolMetrics = async (protocolId: string, days = 30) => {
