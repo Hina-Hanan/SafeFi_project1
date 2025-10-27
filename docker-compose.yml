@@ -114,9 +114,5 @@ volumes:
   mlruns:
     driver: local
 
-networks:
-  safefi-network:
-    external: false
-
 
 
