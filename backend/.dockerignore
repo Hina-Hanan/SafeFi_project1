@@ -26,7 +26,8 @@ README.md
 # Development
 scripts/
 *.bat
-*.sh
+# Allow docker-entrypoint.sh for container startup
+!docker-entrypoint.sh
 
 # IDE
 .vscode

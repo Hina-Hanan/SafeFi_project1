@@ -13,7 +13,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-defi_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-usersafety}
-      POSTGRES_DB: ${POSTGRES_DB:-defi_risk_assessment}
+      POSTGRES_DB: ${POSTGRES_DB:-defi_risk}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -52,7 +52,7 @@ services:
     container_name: safefi-api
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-defi_user}:${POSTGRES_PASSWORD:-usersafety}@db:5432/${POSTGRES_DB:-defi_risk_assessment}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-defi_user}:${POSTGRES_PASSWORD:-usersafety}@db:5432/${POSTGRES_DB:-defi_risk}
       MLFLOW_TRACKING_URI: http://mlflow:5000
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -64,6 +64,10 @@ services:
       EMAIL_ALERTS_ENABLED: ${EMAIL_ALERTS_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      EMAIL_FROM: ${EMAIL_FROM:-safefi@example.com}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-SafeFi Alert System}
     depends_on:
       db:
         condition: service_healthy

@@ -26,18 +26,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python packages from builder
-COPY --from=builder /root/.local /root/.local
+# Copy Python packages from builder to appuser's home
+COPY --from=builder /root/.local /home/appuser/.local
 
 # Copy application code
 COPY app ./app
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 # Create necessary directories
 RUN mkdir -p /app/data/vectorstore /app/logs /app/models && \
     chown -R appuser:appuser /app
 
-# Add local bin to PATH for pip packages
-ENV PATH=/root/.local/bin:$PATH
+# Add local bin to PATH for pip packages (use appuser's home)
+ENV PATH=/home/appuser/.local/bin:$PATH
 
 # Switch to non-root user
 USER appuser
@@ -45,12 +49,12 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Health check
+# Health check (using Python to avoid curl permission issues)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-# Run application with production settings
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Run application with production settings using entrypoint
+CMD ["/app/docker-entrypoint.sh"]
 
 
 
