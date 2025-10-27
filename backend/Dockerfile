@@ -36,6 +36,9 @@ COPY app ./app
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
+# Copy alembic.ini for database migrations
+COPY app/alembic.ini ./alembic.ini
+
 # Create necessary directories
 RUN mkdir -p /app/data/vectorstore /app/logs /app/models && \
     chown -R appuser:appuser /app
