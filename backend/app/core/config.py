@@ -8,7 +8,7 @@ class Settings(BaseModel):
     database_url: str = os.getenv(
         "DATABASE_URL",
         "postgresql+psycopg2://defi_user:usersafety@localhost:5432/defi_risk_assessment",
-    )
+    )  # Note: This default should match your actual database name
     mlflow_tracking_uri: str = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
     
     # LLM Configuration (Ollama)

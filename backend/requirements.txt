@@ -20,7 +20,7 @@ python-dotenv==1.0.1
 # ML Core
 scikit-learn==1.5.2
 pandas==2.2.3
-numpy==2.1.2
+numpy>=1.24.0,<2.0
 joblib==1.4.2
 
 # ML Models
