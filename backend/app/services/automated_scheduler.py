@@ -2,7 +2,7 @@
 Automated Task Scheduler for DeFi Risk Assessment
 
 Runs periodic tasks:
-- Data updates every 15-30 minutes
+- Data updates every 1-2 hours
 - Risk score recalculation
 - Email alert monitoring
 """
@@ -29,7 +29,7 @@ class AutomatedScheduler:
     Manages automated background tasks for continuous monitoring.
     
     Features:
-    - Data updates every 15-30 minutes (randomized)
+    - Data updates every 1-2 hours (randomized)
     - Risk score recalculation
     - Subscriber alert checking
     - Graceful error handling
@@ -50,10 +50,10 @@ class AutomatedScheduler:
         
         logger.info("🚀 Starting automated scheduler...")
         
-        # Schedule data update task - runs every 15-30 minutes (randomized)
+        # Schedule data update task - runs every 1-2 hours (randomized)
         self.scheduler.add_job(
             self._run_data_update_cycle,
-            trigger=IntervalTrigger(minutes=random.randint(15, 30)),
+            trigger=IntervalTrigger(minutes=random.randint(60, 120)),
             id="data_update_task",
             name="Data Update and Alert Check",
             replace_existing=True,
@@ -128,8 +128,8 @@ class AutomatedScheduler:
             self.last_update_time = cycle_start
             self.update_count += 1
             
-            # Calculate next run time (randomized 15-30 minutes)
-            next_run_minutes = random.randint(15, 30)
+            # Calculate next run time (randomized 1-2 hours)
+            next_run_minutes = random.randint(60, 120)
             next_run_time = datetime.utcnow() + timedelta(minutes=next_run_minutes)
             
             # Summary
@@ -176,10 +176,10 @@ class AutomatedScheduler:
                     logger.warning(f"No metrics found for {protocol.name}, skipping")
                     continue
                 
-                # Apply small realistic variations (±1-3% for most metrics)
-                tvl_change = random.uniform(-0.03, 0.03)  # ±3%
-                volume_change = random.uniform(-0.08, 0.08)  # ±8% (more volatile)
-                price_change = random.uniform(-0.02, 0.02)  # ±2%
+                # Apply small realistic variations (±0.5-1.5% for most metrics)
+                tvl_change = random.uniform(-0.015, 0.015)  # ±1.5%
+                volume_change = random.uniform(-0.03, 0.03)  # ±3% (more volatile)
+                price_change = random.uniform(-0.01, 0.01)  # ±1%
                 
                 # Calculate new values
                 new_tvl = max(0, float(latest_metric.tvl or 0) * (1 + tvl_change))
@@ -247,8 +247,8 @@ class AutomatedScheduler:
                 if not latest_risk:
                     continue
                 
-                # Apply small variation (±2-5%)
-                variation_pct = random.uniform(0.02, 0.05)
+                # Apply small variation (±0.5-1.5%)
+                variation_pct = random.uniform(0.005, 0.015)
                 
                 # 60% chance risk decreases, 40% increases (slight bias to stability)
                 direction = -1 if random.random() < 0.6 else 1
@@ -269,12 +269,12 @@ class AutomatedScheduler:
                     new_level = "low"
                 
                 # Update volatility and liquidity scores slightly
-                volatility_change = random.uniform(-0.05, 0.05)
+                volatility_change = random.uniform(-0.02, 0.02)
                 new_volatility = max(0.1, min(0.95, 
                     (latest_risk.volatility_score or 0.5) + volatility_change
                 ))
                 
-                liquidity_change = random.uniform(-0.05, 0.05)
+                liquidity_change = random.uniform(-0.02, 0.02)
                 new_liquidity = max(0.1, min(0.95,
                     (latest_risk.liquidity_score or 0.5) + liquidity_change
                 ))
