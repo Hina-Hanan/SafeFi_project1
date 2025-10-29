@@ -38,10 +38,13 @@ python -c "import fastapi, uvicorn, sqlalchemy" || {
 }
 
 # Start the application
+# Convert LOG_LEVEL to lowercase (uvicorn requires lowercase)
+UVICORN_LOG_LEVEL=$(echo "${LOG_LEVEL:-info}" | tr '[:upper:]' '[:lower:]')
+
 echo "🎯 Starting uvicorn server..."
 echo "   Host: 0.0.0.0"
 echo "   Port: 8000"
 echo "   Workers: 1"
-echo "   Log Level: ${LOG_LEVEL:-info}"
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --log-level "${LOG_LEVEL:-info}"
+echo "   Log Level: ${UVICORN_LOG_LEVEL}"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --log-level "${UVICORN_LOG_LEVEL}"
 
