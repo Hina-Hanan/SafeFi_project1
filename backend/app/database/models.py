@@ -144,7 +144,6 @@ class EmailSubscriber(Base, TimestampMixin):
     last_alert_sent: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     
     __table_args__ = (
-        Index("ix_email_subscribers_email", "email"),
         Index("ix_email_subscribers_active", "is_active"),
     )
 
