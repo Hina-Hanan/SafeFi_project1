@@ -87,9 +87,9 @@ async def force_immediate_update(request: ForceUpdateRequest = ForceUpdateReques
         # Trigger update cycle
         import asyncio
         asyncio.create_task(scheduler._run_data_update_cycle())
-    
-    return {
-        "success": True,
+        
+        return {
+            "success": True,
             "message": "Update cycle initiated",
             "timestamp": datetime.utcnow().isoformat(),
             "run_alerts": request.run_alerts
@@ -252,15 +252,15 @@ async def start_scheduler():
         scheduler = get_scheduler()
         
         if scheduler.is_running:
-    return {
-        "success": True,
+            return {
+                "success": True,
                 "message": "Scheduler is already running",
                 "status": scheduler.get_status()
-    }
+            }
 
         await scheduler.start()
 
-    return {
+        return {
             "success": True,
             "message": "Scheduler started successfully",
             "status": scheduler.get_status()
@@ -281,10 +281,10 @@ async def stop_scheduler():
     """
     try:
         scheduler = get_scheduler()
-    
+        
         if not scheduler.is_running:
-        return {
-            "success": True,
+            return {
+                "success": True,
                 "message": "Scheduler is already stopped",
                 "status": scheduler.get_status()
             }

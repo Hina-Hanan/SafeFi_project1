@@ -24,7 +24,6 @@ logs/
 README.md
 
 # Development
-scripts/
 *.bat
 # Allow docker-entrypoint.sh for container startup
 !docker-entrypoint.sh

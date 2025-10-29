@@ -8,9 +8,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Toggle full vs slim requirements at build time
+ARG USE_FULL_REQS=0
+
+# Copy both requirements sets
+COPY requirements-server.txt ./requirements-server.txt
+COPY requirements.txt ./requirements-full.txt
+
+# Select which requirements to install
+RUN if [ "$USE_FULL_REQS" = "1" ]; then \
+      cp requirements-full.txt requirements.txt ; \
+    else \
+      cp requirements-server.txt requirements.txt ; \
+    fi && \
+    pip install --no-cache-dir --user -r requirements.txt
 
 # Production stage
 FROM python:3.11-slim
@@ -23,6 +34,7 @@ RUN useradd --create-home --shell /bin/bash appuser
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
+    postgresql-client \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -31,6 +43,9 @@ COPY --from=builder /root/.local /home/appuser/.local
 
 # Copy application code
 COPY app ./app
+
+# Copy scripts for DB initialization and seeding
+COPY scripts ./scripts
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh ./docker-entrypoint.sh

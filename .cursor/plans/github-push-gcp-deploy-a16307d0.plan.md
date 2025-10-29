@@ -1,221 +1,138 @@
-<!-- a16307d0-986b-4eba-b40f-26e30e8f1262 e415e2b9-4331-4afd-b158-4a5ada25b0c2 -->
-# GitHub Push and GCP Manual Deployment Plan
+<!-- a16307d0-986b-4eba-b40f-26e30e8f1262 1fcf9d9e-d71a-40b5-b38c-b4a2a4376402 -->
+### Slim API-Only Docker + Local Test + CI
 
-## Overview
+#### Goals
+- Build a small, reliable API image (FastAPI + DB + email + scheduler)
+- Remove heavy ML/RAG deps from the image
+- Keep LLM/Ollama external (host-only), not inside the image
+- Test locally with Docker, then add CI (build + lint + test)
 
-Commit all changes, push to GitHub, then SSH into GCP VM (defi-backend-vm at 34.55.12.211) to pull changes and restart services manually.
+#### Changes (files to edit/add)
+- `backend/requirements-server.txt` (new): minimal deps for the API only.
+- `backend/Dockerfile` (edit): install from `requirements-server.txt`, keep multi-stage, non-root, healthcheck, entrypoint.
+- `docker-compose.yml` (confirm): only `db` and `api`; envs sourced from root `.env`; healthchecks; volumes only for data/logs.
+- `backend/docker-entrypoint.sh` (confirm): wait-for-DB loop, run migrations/create tables, then start Uvicorn.
+- `.env` (local): API/db/email vars; no MLflow; no heavy RAG vars.
+- `.github/workflows/ci.yml` (new): lint, type-check, unit tests, and Docker build on push to `main`.
 
-## Phase 1: Git Commit and Push
-
-### Files to Commit
-
-**Modified Backend Files:**
-
-- `backend/app/services/email_alert_service.py` - Email format improvements
-- `backend/app/database/models.py` - UUID fix for EmailSubscriber
-- `backend/app/api/v1/monitoring.py` - Added get_email_service import
-- `backend/app/api/v1/email_alerts.py` - Alert endpoints
-- `backend/app/startup.py` - Async scheduler integration
-- `backend/requirements.txt` - Added apscheduler
-
-**New Backend Services:**
-
-- `backend/app/services/automated_scheduler.py` - 15-30 min randomized updates
-- `backend/app/services/subscriber_alert_service.py` - Personalized alerts
-
-**Modified Frontend Files:**
-
-- `frontend/src/services/api.ts` - Fixed fetchProtocols response handling
-- `frontend/src/components/ActiveRiskAlerts.tsx`
-- `frontend/src/components/RiskThresholdSettings.tsx`
-
-**New Infrastructure:**
-
-- `.github/` - CI/CD workflows
-- `docker-compose.yml` - Updated
-- `backend/Dockerfile`, `frontend/Dockerfile` - Enhanced
-- `frontend/nginx.conf` - New
-- `.dockerignore`, `backend/.dockerignore`, `frontend/.dockerignore`
-
-**Documentation:**
-
-- `AUTOMATED_ALERTS_SETUP.md`
-- `EMAIL_FORMAT_IMPROVEMENTS.md`
-- `FRONTEND_BACKEND_CONNECTION.md`
-- `CICD.md`, `DEPLOYMENT_GUIDE.md`, etc.
-
-### Git Commands
-
-```bash
-# Add all modified and new files
-git add -A
-
-# Commit with descriptive message
-git commit -m "feat: email alerts, automated scheduler, frontend fixes
-
-- Improved email format with dynamic URLs (safefi.live/localhost)
-- Added automated scheduler (15-30 min intervals)
-- Fixed EmailSubscriber UUID type mismatch
-- Added subscriber alert service with personalized thresholds
-- Fixed frontend fetchProtocols response handling
-- Enhanced Dockerfiles and CI/CD workflows
-- Updated documentation"
-
-# Push to GitHub
-git push origin main
+#### Minimal content (concise snippets)
+- `backend/requirements-server.txt`
+```text
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.34
+psycopg2-binary==2.9.9
+pydantic==2.9.2
+email-validator==2.1.0
+httpx==0.27.2
+python-dotenv==1.0.1
+apscheduler==3.10.4
 ```
 
-## Phase 2: SSH to GCP VM
+- `backend/Dockerfile` (key edits only)
+```Dockerfile
+FROM python:3.11-slim AS builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+COPY requirements-server.txt ./requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-### Connection Details
-
-- **VM Instance:** defi-backend-vm
-- **IP Address:** 34.55.12.211
-- **Method:** SSH via browser (GCP Console)
-
-### SSH Access Steps
-
-1. Go to GCP Console → Compute Engine → VM Instances
-2. Find `defi-backend-vm`
-3. Click "SSH" button (opens browser terminal)
-
-## Phase 3: Manual Deployment on VM
-
-### Step-by-Step Commands
-
-```bash
-# 1. Navigate to project directory
-cd /opt/safefi
-
-# 2. Check current status
-git status
-docker ps
-
-# 3. Pull latest code from GitHub
-git fetch origin
-git pull origin main
-
-# 4. Check if .env file exists and has required variables
-cat .env | grep -E "DATABASE_URL|SMTP_|ENVIRONMENT"
-
-# 5. Backup current database (optional but recommended)
-docker-compose exec -T db pg_dump -U postgres defi_risk > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# 6. Stop current services
-docker-compose down
-
-# 7. Rebuild and restart services
-docker-compose up -d --build
-
-# 8. Wait for services to start
-sleep 15
-
-# 9. Check service status
-docker-compose ps
-docker-compose logs --tail=50 api
-
-# 10. Run database migrations (if any)
-docker-compose exec api alembic upgrade head
-
-# 11. Restart services to apply all changes
-docker-compose restart api
-
-# 12. Verify health
-curl http://localhost:8000/health
-curl http://localhost:8000/api/v1/protocols?limit=3
-
-# 13. Check scheduler is running
-curl http://localhost:8000/monitoring/scheduler/status
-
-# 14. Test email alert (replace with your email)
-curl -X POST http://localhost:8000/monitoring/alerts/test/hinahanan003@gmail.com
+FROM python:3.11-slim
+WORKDIR /app
+RUN useradd --create-home --shell /bin/bash appuser && \
+    apt-get update && apt-get install -y --no-install-recommends libpq-dev curl && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /root/.local /home/appuser/.local
+COPY app ./app
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+ENV PATH=/home/appuser/.local/bin:$PATH
+USER appuser
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+CMD ["/app/docker-entrypoint.sh"]
 ```
 
-## Phase 4: Verification
-
-### Check These Endpoints
-
-```bash
-# Backend health
-curl https://api.safefi.live/health
-
-# Protocols endpoint
-curl https://api.safefi.live/api/v1/protocols?limit=5
-
-# Scheduler status
-curl https://api.safefi.live/monitoring/scheduler/status
-
-# Frontend (in browser)
-# https://safefi.live
+- `.env` (local)
+```text
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+API_PORT=8000
+POSTGRES_USER=defi_user
+POSTGRES_PASSWORD=usersafety
+POSTGRES_DB=defi_risk_assessment
+POSTGRES_PORT=5432
+EMAIL_ALERTS_ENABLED=true
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@example.com
+SMTP_PASSWORD=app_password
+EMAIL_FROM=you@example.com
+EMAIL_FROM_NAME=SafeFi Alert System
+# LLM kept external; not baked into image
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=tinyllama
 ```
 
-### Check Logs for Errors
-
-```bash
-# Backend logs
-docker-compose logs -f api --tail=100
-
-# Database logs
-docker-compose logs db --tail=50
-
-# All services
-docker-compose logs --tail=100
+- `.github/workflows/ci.yml` (high level)
+```yaml
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install deps (server-only)
+        run: |
+          pip install -r backend/requirements-server.txt
+      - name: Lint & Type check
+        run: |
+          pip install ruff mypy
+          ruff check backend/app
+          mypy backend/app --ignore-missing-imports
+      - name: Unit tests
+        run: |
+          pip install pytest
+          pytest -q
+      - name: Docker build api
+        run: |
+          docker build -t safefi-api:ci -f backend/Dockerfile backend
 ```
 
-## Important Notes
+#### Local test steps
+1) From project root: `cp backend/requirements-server.txt backend/requirements.txt` (optional, if Dockerfile copies requirements-server.txt directly, skip).
+2) Ensure `.env` exists at root (values above).
+3) `docker compose down`
+4) `docker compose build --no-cache api`
+5) `docker compose up -d`
+6) `docker compose ps` and `docker compose logs -f api`
+7) Verify: `curl http://localhost:8000/health` and `curl "http://localhost:8000/protocols?limit=5"`.
 
-1. **Environment Variables:** Ensure `.env` on VM has:
-
-   - `ENVIRONMENT=production`
-   - `CORS_ORIGINS=https://safefi.live`
-   - SMTP settings for email alerts
-   - Database credentials
-
-2. **Database Migration:** The UUID fix might require migration. If errors occur:
-   ```bash
-   docker-compose exec api python -m alembic revision --autogenerate -m "Fix EmailSubscriber UUID type"
-   docker-compose exec api alembic upgrade head
-   ```
-
-3. **Nginx/Frontend:** If using separate Nginx for frontend routing, restart it:
-   ```bash
-   sudo systemctl restart nginx
-   ```
-
-4. **Firewall:** Ensure ports 80, 443, 8000 are open in GCP firewall rules
-
-## Rollback Plan (if needed)
-
-```bash
-# Stop services
-docker-compose down
-
-# Checkout previous commit
-git log --oneline -10  # Find previous commit hash
-git checkout <previous-commit-hash>
-
-# Restart services
-docker-compose up -d --build
+#### VM deploy (manual, after local success)
+- SSH, `git pull`, ensure `.env` at `/var/lib/postgresql/SafeFi_project1`, then:
+```
+cd /var/lib/postgresql/SafeFi_project1
+sudo docker compose down --volumes --remove-orphans
+sudo docker compose build --no-cache api
+sudo docker compose up -d
+sudo docker compose ps
+sudo docker compose logs -f api
 ```
 
-## Success Criteria
+#### Notes
+- Frontend remains in GCS; no change here.
+- If disk space issues occur on the VM, prune Docker and rebuild.
+- LLM can run on host (Ollama) if needed; API calls it via OLLAMA_BASE_URL.
 
-- [ ] Git push successful
-- [ ] SSH connection established
-- [ ] Code pulled on VM
-- [ ] Services restarted without errors
-- [ ] Health endpoints return 200
-- [ ] Frontend loads at https://safefi.live
-- [ ] Scheduler status shows running
-- [ ] Test email received successfully
 
 ### To-dos
 
-- [ ] Fix docker-compose.yml SMTP_PASSWORD and EMAIL_ALERTS_ENABLED, remove duplicate networks
-- [ ] Create .env file in project root with production variables
-- [ ] Ensure .env is in .gitignore
-- [ ] Remove automated deployment jobs from .github/workflows/deploy.yml
-- [ ] Create DEPLOYMENT.md with manual deployment steps
-- [ ] Create VM_SETUP.md with VM environment documentation
-- [ ] Create .env file on VM at /var/lib/postgresql/SafeFi_project1/
-- [ ] Push changes to GitHub and deploy to VM, verify all services
+- [ ] Add backend/requirements-server.txt with slim API deps
+- [ ] Edit backend/Dockerfile to install requirements-server.txt
+- [ ] Verify .env and docker-compose.yml (db+api only)
+- [ ] Build and run docker locally; verify health endpoints
+- [ ] Add .github/workflows/ci.yml for lint, tests, docker build
+- [ ] Manual deploy on VM: pull, build, up, verify

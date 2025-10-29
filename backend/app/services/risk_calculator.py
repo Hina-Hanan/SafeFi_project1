@@ -19,7 +19,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, f1_score, precision_score, recall_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from xgboost import XGBClassifier  # type: ignore[import]
+# Optional heavy ML imports (excluded in slim API image)
+try:
+    from xgboost import XGBClassifier  # type: ignore[import]
+    XGB_AVAILABLE = True
+except ImportError:
+    XGB_AVAILABLE = False
 
 from app.database.connection import SessionLocal
 from app.database.models import ProtocolMetric, Protocol, RiskScore
@@ -348,13 +353,26 @@ class RiskCalculatorService:
                 "min_samples_split": [2, 5, 10],
                 "min_samples_leaf": [1, 2, 4]
             }),
-            ("xgb", XGBClassifier(random_state=42, eval_metric="mlogloss", n_jobs=-1, objective="multi:softprob", num_class=3), {
-                "n_estimators": [100, 200, 300],
-                "max_depth": [3, 5, 7],
-                "learning_rate": [0.01, 0.1, 0.2],
-                "subsample": [0.8, 0.9, 1.0]
-            }),
         ]
+
+        # Add XGBoost candidate only if available
+        if XGB_AVAILABLE:
+            candidates.append((
+                "xgb",
+                XGBClassifier(
+                    random_state=42,
+                    eval_metric="mlogloss",
+                    n_jobs=-1,
+                    objective="multi:softprob",
+                    num_class=3
+                ),
+                {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [3, 5, 7],
+                    "learning_rate": [0.01, 0.1, 0.2],
+                    "subsample": [0.8, 0.9, 1.0]
+                }
+            ))
         
         performances: List[ModelPerformance] = []
         

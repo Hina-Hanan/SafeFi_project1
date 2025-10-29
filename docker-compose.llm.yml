@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        USE_FULL_REQS: "1"
+    # Enable host.docker.internal on Linux (works on Windows/macOS too)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # For Docker: use host.docker.internal to reach Ollama on host
+      # For local dev: use http://localhost:11434 in .env
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      # Ensure LLM features are enabled
+      RAG_ENABLED: "true"
+
+

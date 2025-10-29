@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   safefi-network:
     driver: bridge
@@ -21,7 +19,7 @@ services:
     networks:
       - safefi-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-defi_user}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-defi_user} -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,10 +36,13 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-defi_user}:${POSTGRES_PASSWORD:-usersafety}@db:5432/${POSTGRES_DB:-defi_risk_assessment}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:80}
-      # LLM Configuration
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      # CORS: Configure for your frontend domain (GCS bucket URL or custom domain)
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,https://safefi.live}
+      SEED_PROTOCOLS: ${SEED_PROTOCOLS:-true}
+      # LLM Configuration (only used if LLM dependencies are installed)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-tinyllama}
+      RAG_ENABLED: ${RAG_ENABLED:-false}
       # Email Configuration
       EMAIL_ALERTS_ENABLED: ${EMAIL_ALERTS_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
@@ -62,7 +63,8 @@ services:
     networks:
       - safefi-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # Use Python-based healthcheck (curl may not be available in slim image)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
