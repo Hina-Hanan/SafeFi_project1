@@ -838,8 +838,16 @@ class RiskCalculatorService:
         Returns model comparison data, performance trends, and registry information.
         """
         try:
-            client = mlflow.MlflowClient()
-            experiment = mlflow.get_experiment_by_name(self.experiment_name)
+            # Try to get MLflow client, but handle connection errors gracefully
+            try:
+                client = mlflow.MlflowClient()
+                experiment = mlflow.get_experiment_by_name(self.experiment_name)
+            except Exception as mlflow_error:
+                logger.warning(f"MLflow not available for metrics retrieval: {mlflow_error}")
+                return {
+                    "error": "MLflow connection unavailable",
+                    "message": "Performance metrics require MLflow server connection"
+                }
             
             if not experiment:
                 return {"error": "No experiment found"}

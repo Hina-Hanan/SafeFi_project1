@@ -97,6 +97,8 @@ jobs:
           DATABASE_URL: postgresql+psycopg2://defi_user:usersafety@localhost:5432/defi_risk_assessment
           ENVIRONMENT: test
           LOG_LEVEL: DEBUG
+          # MLflow: Use file-based tracking (no server needed)
+          MLFLOW_TRACKING_URI: file:./mlruns
           # LLM configuration (tests will skip if Ollama not available)
           OLLAMA_BASE_URL: http://localhost:11434
           OLLAMA_MODEL: tinyllama
@@ -104,6 +106,7 @@ jobs:
         run: |
           echo "🧪 Running all tests with full LLM dependencies..."
           echo "ℹ️  Using requirements.txt (full build with LLM/RAG dependencies)"
+          echo "ℹ️  MLflow tracking: file-based (no server required)"
           
           # Run all tests - RAG tests will skip gracefully if Ollama not available
           pytest tests/ -v --tb=short --maxfail=5
