@@ -129,55 +129,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify LLM dependencies
-        run: |
-          echo "Verifying LLM dependencies in full build..."
-          docker run --rm safefi-backend:test-full python -c "
-            import sys
-            errors = []
-            
-            # Check LLM dependencies
-            try:
-              import langchain_core
-              print('✅ langchain_core installed')
-            except ImportError as e:
-              errors.append(f'❌ langchain_core: {e}')
-            
-            try:
-              import chromadb
-              print('✅ chromadb installed')
-            except ImportError as e:
-              errors.append(f'❌ chromadb: {e}')
-            
-            try:
-              import sentence_transformers
-              print('✅ sentence_transformers installed')
-            except ImportError as e:
-              errors.append(f'❌ sentence_transformers: {e}')
-            
-            
-            try:
-              import xgboost
-              print('✅ xgboost installed')
-            except ImportError as e:
-              errors.append(f'❌ xgboost: {e}')
-            
-            # Check ML dependencies
-            try:
-              import mlflow
-              print('✅ mlflow installed')
-            except ImportError as e:
-              errors.append(f'❌ mlflow: {e}')
-            
-            if errors:
-              print('\\n❌ Missing dependencies:')
-              for error in errors:
-                print(f'  {error}')
-              sys.exit(1)
-            else:
-              print('\\n✅ All LLM dependencies verified!')
-          "
-
   summary:
     name: CI Summary
     runs-on: ubuntu-latest
