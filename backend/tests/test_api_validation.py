@@ -7,11 +7,23 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("MLFLOW_TRACKING_URI", "http://127.0.0.1:5001")
+# Set MLflow to file-based for tests (no server needed)
+os.environ.setdefault("MLFLOW_TRACKING_URI", "file:./mlruns")
 
 from app.main import app  # noqa: E402
 
 
+# Use a fixture-based client in conftest.py (test_client) for better test isolation
+# For backward compatibility, create a module-level client that will be used
+# but tables will be created via autouse fixture in conftest.py
+@pytest.fixture(scope="module")
+def client():
+    """Module-level test client for api_validation tests."""
+    from fastapi.testclient import TestClient
+    return TestClient(app)
+
+
+# Global client for tests that don't use fixtures (will work after autouse setup_database)
 client = TestClient(app)
 
 
