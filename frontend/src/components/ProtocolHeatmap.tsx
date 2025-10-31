@@ -104,10 +104,10 @@ export default function ProtocolHeatmap({ onProtocolSelect }: ProtocolHeatmapPro
 
       <Grid container spacing={3}>
         {sortedProtocols.map((protocol: ProtocolWithRisk) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={protocol.id}>
+          <Grid item xs={12} sm={6} md={4} lg={3} key={protocol.protocol.id}>
             <ProtocolCard
               protocol={protocol}
-              onClick={() => onProtocolSelect(protocol.id)}
+              onClick={() => onProtocolSelect(protocol.protocol.id)}
             />
           </Grid>
         ))}
