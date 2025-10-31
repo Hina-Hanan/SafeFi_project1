@@ -1,0 +1,424 @@
+name: CD - Deploy Backend to GCP VM
+
+on:
+  # Trigger after CI workflow completes successfully
+  workflow_run:
+    workflows: ["CI - Test and Build"]
+    types:
+      - completed
+    branches: [main]
+  # Manual trigger (bypasses CI check - use with caution)
+  workflow_dispatch:
+
+env:
+  # VM_USER: SSH username (can be overridden by setting secret GCP_VM_USER)
+  # If GCP_VM_USER secret is not set, it defaults to 'hinahanan2003'
+  VM_USER: ${{ secrets.GCP_VM_USER != '' && secrets.GCP_VM_USER || 'hinahanan2003' }}
+  VM_IP: ${{ secrets.GCP_VM_IP }}
+  # PROJECT_PATH: Deployment path on VM (can be overridden by setting secret GCP_PROJECT_PATH)
+  # If GCP_PROJECT_PATH secret is not set, it defaults to '/var/lib/postgresql/SafeFi_project1'
+  PROJECT_PATH: ${{ secrets.GCP_PROJECT_PATH != '' && secrets.GCP_PROJECT_PATH || '/var/lib/postgresql/SafeFi_project1' }}
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend to GCP VM
+    runs-on: ubuntu-latest
+    
+    # Only deploy if CI passed (or manual dispatch)
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && 
+       (contains(github.event.workflow_run.head_branch, 'main') || github.event.workflow_run.head_branch == 'main'))
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check if backend files changed
+        if: github.event_name == 'workflow_run'
+        id: check-changes
+        run: |
+          # Get the commit SHA that triggered CI
+          CI_SHA="${{ github.event.workflow_run.head_sha }}"
+          MAIN_SHA="${{ github.event.workflow_run.head_branch }}"
+          
+          # Check if backend-related files changed in this commit
+          if git diff --name-only ${CI_SHA}~1 ${CI_SHA} | grep -E '(^backend/|docker-compose|\.github/workflows/cd-backend\.yml)'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Backend files changed, proceeding with deployment"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️  No backend files changed, skipping deployment"
+          fi
+
+      - name: Set up SSH
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.GCP_VM_SSH_KEY }}
+
+      - name: Add VM to known hosts
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        run: |
+          ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
+
+      - name: Pre-deployment checks
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        run: |
+          ssh ${{ env.VM_USER }}@${{ secrets.GCP_VM_IP }} << 'ENDSSH'
+            cd ${{ env.PROJECT_PATH }}
+            
+            echo "🔍 Running pre-deployment checks..."
+            
+            # Check disk space (at least 5GB free)
+            echo "📊 Checking disk space..."
+            DISK_FREE=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
+            if [ "$DISK_FREE" -lt 5 ]; then
+              echo "❌ Insufficient disk space: ${DISK_FREE}GB free (need at least 5GB)"
+              exit 1
+            fi
+            echo "✅ Disk space OK: ${DISK_FREE}GB free"
+            
+            # Verify Ollama service is running
+            echo "🤖 Verifying Ollama service..."
+            if ! ss -tlnp | grep -q ':11434'; then
+              echo "❌ Ollama is not listening on port 11434"
+              echo "   Please start Ollama: OLLAMA_HOST=0.0.0.0:11434 nohup ollama serve > /tmp/ollama.log 2>&1 &"
+              exit 1
+            fi
+            echo "✅ Ollama port check passed"
+            
+            # Verify Ollama API is accessible
+            if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+              echo "❌ Ollama API is not accessible"
+              exit 1
+            fi
+            echo "✅ Ollama API is accessible"
+            
+            # Verify tinyllama model is available
+            OLLAMA_MODELS=$(curl -s http://localhost:11434/api/tags | grep -o '"name":"[^"]*"' | grep -o 'tinyllama' || echo "")
+            if [ -z "$OLLAMA_MODELS" ]; then
+              echo "⚠️  Warning: tinyllama model not found. LLM features may not work."
+              echo "   Install with: ollama pull tinyllama"
+            else
+              echo "✅ tinyllama model is available"
+            fi
+          ENDSSH
+
+      - name: Copy files to VM
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='venv' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache' \
+            --exclude='node_modules' \
+            --exclude='frontend/dist' \
+            --exclude='mlruns' \
+            --exclude='*.log' \
+            ./ ${{ env.VM_USER }}@${{ secrets.GCP_VM_IP }}:${{ env.PROJECT_PATH }}/
+
+      - name: Deploy on VM
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        id: deploy
+        run: |
+          ssh ${{ env.VM_USER }}@${{ secrets.GCP_VM_IP }} << 'ENDSSH'
+            set -e
+            cd ${{ env.PROJECT_PATH }} || {
+              echo "⚠️  Could not cd to ${{ env.PROJECT_PATH }}"
+              echo "   Trying with sudo..."
+              sudo -u postgres sh -c "cd ${{ env.PROJECT_PATH }} && pwd" || {
+                echo "❌ Cannot access project directory. Please check permissions."
+                exit 1
+              }
+              # If postgres user can access, switch to that user for git operations
+              export USE_POSTGRES_USER=true
+            }
+            
+            # Set rollback flag
+            ROLLBACK_NEEDED=false
+            
+            # Backup current deployment state (try without sudo first, then with sudo if needed)
+            echo "📦 Creating backup..."
+            docker compose -f docker-compose.yml -f docker-compose.llm.yml ps > /tmp/docker_backup_status.txt 2>&1 || \
+              sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml ps > /tmp/docker_backup_status.txt 2>&1 || true
+            docker compose -f docker-compose.yml -f docker-compose.llm.yml logs api --tail=100 > /tmp/docker_backup_logs.txt 2>&1 || \
+              sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml logs api --tail=100 > /tmp/docker_backup_logs.txt 2>&1 || true
+            
+            # Trap for rollback on error
+            cleanup() {
+              if [ "$ROLLBACK_NEEDED" = true ]; then
+                echo "🔄 Rolling back deployment..."
+                if [ "$USE_SUDO_DOCKER" = "true" ]; then
+                  sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml down || true
+                else
+                  docker compose -f docker-compose.yml -f docker-compose.llm.yml down || true
+                fi
+                echo "⚠️  Previous containers stopped. Manual intervention may be required."
+              fi
+            }
+            trap cleanup ERR EXIT
+            
+            # Pull latest code (if using git) - handle permission issues
+            echo "📥 Pulling latest code..."
+            if [ "$USE_POSTGRES_USER" = "true" ]; then
+              # Try with postgres user if needed
+              sudo -u postgres sh -c "cd ${{ env.PROJECT_PATH }} && git pull origin main" || {
+                echo "⚠️  Git pull with postgres user failed, trying current user with sudo..."
+                sudo git -C ${{ env.PROJECT_PATH }} pull origin main || {
+                  echo "⚠️  Git pull failed. Continuing with existing code..."
+                }
+              }
+            else
+              git pull origin main || {
+                echo "⚠️  Git pull failed, trying with sudo..."
+                sudo git pull origin main || {
+                  echo "⚠️  Git pull skipped (permission issue or not using git)"
+                }
+              }
+            fi
+            
+            # Stop existing containers (try with sudo if needed)
+            echo "⏸️  Stopping existing containers..."
+            docker compose -f docker-compose.yml -f docker-compose.llm.yml down || {
+              echo "⚠️  Docker compose down failed, trying with sudo..."
+              sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml down || true
+            }
+            
+            # Build API container with LLM support (always)
+            echo "🔨 Building API container with LLM support..."
+            docker compose -f docker-compose.yml -f docker-compose.llm.yml build api || {
+              echo "⚠️  Docker build failed, trying with sudo..."
+              sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml build api || {
+                echo "❌ Docker build failed even with sudo"
+                ROLLBACK_NEEDED=true
+                exit 1
+              }
+              # If sudo worked, set flag for subsequent commands
+              export USE_SUDO_DOCKER=true
+            }
+            
+            # Start services (use sudo if build required it)
+            echo "🚀 Starting services..."
+            if [ "$USE_SUDO_DOCKER" = "true" ]; then
+              sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml up -d || {
+                echo "❌ Failed to start containers"
+                ROLLBACK_NEEDED=true
+                exit 1
+              }
+            else
+              docker compose -f docker-compose.yml -f docker-compose.llm.yml up -d || {
+                echo "⚠️  Docker compose up failed, trying with sudo..."
+                sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml up -d || {
+                  echo "❌ Failed to start containers even with sudo"
+                  ROLLBACK_NEEDED=true
+                  exit 1
+                }
+                export USE_SUDO_DOCKER=true
+              }
+            fi
+            
+            # Wait for database to be ready
+            echo "⏳ Waiting for database to be ready..."
+            sleep 10
+            
+            # Wait for API to be healthy
+            echo "🏥 Checking API health..."
+            max_attempts=20
+            attempt=0
+            while [ $attempt -lt $max_attempts ]; do
+              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ API is healthy!"
+                break
+              else
+                echo "   Attempt $((attempt+1))/$max_attempts: API not ready yet..."
+                sleep 5
+                attempt=$((attempt+1))
+              fi
+            done
+            
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Health check failed after $max_attempts attempts"
+              if [ "$USE_SUDO_DOCKER" = "true" ]; then
+                sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml logs api --tail=50
+              else
+                docker compose -f docker-compose.yml -f docker-compose.llm.yml logs api --tail=50
+              fi
+              ROLLBACK_NEEDED=true
+              exit 1
+            fi
+            
+            # Run post-deployment scripts
+            echo "📜 Running post-deployment scripts..."
+            
+            # Function to run docker compose exec with appropriate sudo
+            docker_exec() {
+              if [ "$USE_SUDO_DOCKER" = "true" ]; then
+                sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml exec -T "$@"
+              else
+                docker compose -f docker-compose.yml -f docker-compose.llm.yml exec -T "$@"
+              fi
+            }
+            
+            SCRIPT_TIMEOUT=300  # 5 minutes per script
+            SCRIPTS=(
+              "scripts/seed_real_protocols.py"
+              "scripts/real_data.py"
+              "scripts/auto_update_risks.py"
+              "scripts/7historical_graph.py"
+              "scripts/initialize_vector_store.py"
+            )
+            
+            for script in "${SCRIPTS[@]}"; do
+              echo ""
+              echo "▶️  Running $script..."
+              
+              # Skip initialize_vector_store.py if RAG is not enabled (check via env or config)
+              if [ "$script" = "scripts/initialize_vector_store.py" ]; then
+                RAG_ENABLED=$(docker_exec api python -c "import os; print(os.getenv('RAG_ENABLED', 'false'))" 2>/dev/null || echo "false")
+                if [ "$RAG_ENABLED" != "true" ]; then
+                  echo "⏭️  Skipping $script (RAG not enabled)"
+                  continue
+                fi
+              fi
+              
+              if timeout $SCRIPT_TIMEOUT docker_exec api python "$script"; then
+                echo "✅ $script completed successfully"
+              else
+                SCRIPT_EXIT_CODE=$?
+                echo "❌ $script failed with exit code $SCRIPT_EXIT_CODE"
+                echo "📋 Script output:"
+                docker_exec api logs --tail=30 || {
+                  if [ "$USE_SUDO_DOCKER" = "true" ]; then
+                    sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml logs api --tail=30
+                  else
+                    docker compose -f docker-compose.yml -f docker-compose.llm.yml logs api --tail=30
+                  fi
+                }
+                ROLLBACK_NEEDED=true
+                exit 1
+              fi
+              
+              # Verify database state after each script
+              echo "🔍 Verifying database state..."
+              DB_CHECK=$(docker_exec api python -c "
+                from app.database.connection import SessionLocal
+                from app.database.models import Protocol
+                db = SessionLocal()
+                try:
+                  count = db.query(Protocol).count()
+                  print(f'Protocols in DB: {count}')
+                  if count == 0:
+                    exit(1)
+                finally:
+                  db.close()
+              " 2>&1)
+              
+              if [ $? -ne 0 ]; then
+                echo "❌ Database verification failed after $script"
+                echo "$DB_CHECK"
+                ROLLBACK_NEEDED=true
+                exit 1
+              fi
+              echo "$DB_CHECK"
+            done
+            
+            # Final verification
+            echo ""
+            echo "🔍 Running final verification..."
+            
+            # Check API health
+            if ! curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "❌ API health check failed"
+              ROLLBACK_NEEDED=true
+              exit 1
+            fi
+            
+            # Check LLM service if enabled
+            LLM_HEALTH=$(curl -s http://localhost:8000/llm/health 2>&1 || echo "{}")
+            if echo "$LLM_HEALTH" | grep -q '"ollama_available":true'; then
+              echo "✅ LLM service is available"
+            else
+              echo "⚠️  LLM service may not be available"
+              echo "   Response: $LLM_HEALTH"
+            fi
+            
+            # Check vector store if enabled
+            if echo "$LLM_HEALTH" | grep -q '"vector_store_initialized":true'; then
+              echo "✅ Vector store is initialized"
+            else
+              echo "⚠️  Vector store may not be initialized"
+            fi
+            
+            # Clear rollback flag on success
+            ROLLBACK_NEEDED=false
+            
+            # Verify deployment
+            echo ""
+            echo "📊 Deployment Status:"
+            if [ "$USE_SUDO_DOCKER" = "true" ]; then
+              sudo docker compose -f docker-compose.yml -f docker-compose.llm.yml ps
+            else
+              docker compose -f docker-compose.yml -f docker-compose.llm.yml ps
+            fi
+            
+            echo ""
+            echo "✅ Deployment completed successfully!"
+            if [ "$USE_SUDO_DOCKER" = "true" ]; then
+              echo "⚠️  Note: Used sudo for Docker commands due to permission requirements"
+            fi
+            if [ "$USE_POSTGRES_USER" = "true" ]; then
+              echo "⚠️  Note: Used postgres user for git operations due to permission requirements"
+            fi
+          ENDSSH
+
+      - name: Verify deployment
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        run: |
+          sleep 10
+          HEALTH_RESPONSE=$(curl -s http://${{ secrets.GCP_VM_IP }}:8000/health || echo "{}")
+          if echo "$HEALTH_RESPONSE" | grep -q '"status":"ok"'; then
+            echo "✅ Deployment verified successfully"
+          else
+            echo "❌ Deployment verification failed"
+            echo "Response: $HEALTH_RESPONSE"
+            exit 1
+          fi
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Backend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **VM**: ${{ secrets.GCP_VM_IP }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Health Checks" >> $GITHUB_STEP_SUMMARY
+          echo "- API: http://${{ secrets.GCP_VM_IP }}:8000/health" >> $GITHUB_STEP_SUMMARY
+          echo "- Docs: http://${{ secrets.GCP_VM_IP }}:8000/docs" >> $GITHUB_STEP_SUMMARY
+          echo "- LLM: http://${{ secrets.GCP_VM_IP }}:8000/llm/health" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Post-Deployment Scripts" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ seed_real_protocols.py" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ real_data.py" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ auto_update_risks.py" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ 7historical_graph.py" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ initialize_vector_store.py" >> $GITHUB_STEP_SUMMARY

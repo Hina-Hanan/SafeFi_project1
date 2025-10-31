@@ -1,0 +1,185 @@
+name: CD - Deploy Frontend to GCS
+
+on:
+  # Trigger after CI workflow completes successfully
+  workflow_run:
+    workflows: ["CI - Test and Build"]
+    types:
+      - completed
+    branches: [main]
+  # Manual trigger (bypasses CI check - use with caution)
+  workflow_dispatch:
+
+env:
+  GCS_BUCKET: ${{ secrets.GCS_BUCKET_NAME }}
+  GCS_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend to GCS
+    runs-on: ubuntu-latest
+    
+    # Only deploy if CI passed (or manual dispatch)
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && 
+       (contains(github.event.workflow_run.head_branch, 'main') || github.event.workflow_run.head_branch == 'main'))
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check if frontend files changed
+        if: github.event_name == 'workflow_run'
+        id: check-changes
+        run: |
+          # Get the commit SHA that triggered CI
+          CI_SHA="${{ github.event.workflow_run.head_sha }}"
+          
+          # Check if frontend-related files changed in this commit
+          if git diff --name-only ${CI_SHA}~1 ${CI_SHA} | grep -E '(^frontend/|\.github/workflows/cd-frontend\.yml)'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Frontend files changed, proceeding with deployment"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️  No frontend files changed, skipping deployment"
+          fi
+
+      - name: Set up Node.js
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build frontend
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        working-directory: ./frontend
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: npm run build
+
+      - name: Authenticate to GCP
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify build output
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        working-directory: ./frontend
+        run: |
+          if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
+            echo "❌ Build output directory is empty or missing"
+            exit 1
+          fi
+          if [ ! -f "dist/index.html" ]; then
+            echo "❌ dist/index.html not found"
+            exit 1
+          fi
+          echo "✅ Build output verified"
+          echo "Files in dist:"
+          find dist -type f | head -20
+
+      - name: Upload to GCS
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        run: |
+          echo "📤 Uploading files to GCS bucket: ${{ env.GCS_BUCKET }}"
+          
+          # Verify bucket exists and is accessible
+          if ! gsutil ls -b gs://${{ env.GCS_BUCKET }}/ > /dev/null 2>&1; then
+            echo "❌ Bucket ${{ env.GCS_BUCKET }} does not exist or is not accessible"
+            exit 1
+          fi
+          
+          # Upload all files from dist directory
+          if ! gsutil -m rsync -d -r frontend/dist/ gs://${{ env.GCS_BUCKET }}/; then
+            echo "❌ Failed to upload files to GCS"
+            exit 1
+          fi
+          
+          echo "✅ Files uploaded successfully"
+          
+          # Set correct content types
+          gsutil -m setmeta -h "Content-Type:text/html" gs://${{ env.GCS_BUCKET }}/*.html 2>/dev/null || echo "⚠️  Could not set HTML content type (may already be set)"
+          gsutil -m setmeta -h "Content-Type:application/javascript" gs://${{ env.GCS_BUCKET }}/assets/*.js 2>/dev/null || echo "⚠️  Could not set JS content type (may already be set)"
+          gsutil -m setmeta -h "Content-Type:text/css" gs://${{ env.GCS_BUCKET }}/assets/*.css 2>/dev/null || echo "⚠️  Could not set CSS content type (may already be set)"
+          
+          # Make bucket public (if not already)
+          gsutil iam ch allUsers:objectViewer gs://${{ env.GCS_BUCKET }} 2>/dev/null || echo "⚠️  Could not set public access (may already be set)"
+
+      - name: Verify deployment
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        run: |
+          echo "🔍 Verifying deployment..."
+          
+          # Check if index.html is accessible
+          FRONTEND_URL="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/index.html"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL")
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Frontend not accessible. HTTP code: $HTTP_CODE"
+            echo "URL: $FRONTEND_URL"
+            exit 1
+          fi
+          
+          echo "✅ Frontend is accessible (HTTP $HTTP_CODE)"
+          echo "URL: $FRONTEND_URL"
+
+      - name: Get frontend URL
+        if: |
+          github.event_name == 'workflow_dispatch' || 
+          (github.event_name == 'workflow_run' && steps.check-changes.outputs.changed == 'true')
+        id: get-url
+        run: |
+          if [ -n "${{ secrets.GCS_CUSTOM_DOMAIN }}" ]; then
+            FRONTEND_URL="${{ secrets.GCS_CUSTOM_DOMAIN }}"
+          else
+            FRONTEND_URL="https://storage.googleapis.com/${{ env.GCS_BUCKET }}/index.html"
+          fi
+          echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+          echo "Frontend URL: $FRONTEND_URL"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## 🌐 Frontend Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bucket**: ${{ env.GCS_BUCKET }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Frontend URL" >> $GITHUB_STEP_SUMMARY
+          echo "- ${{ steps.get-url.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Info" >> $GITHUB_STEP_SUMMARY
+          echo "- Build completed at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY

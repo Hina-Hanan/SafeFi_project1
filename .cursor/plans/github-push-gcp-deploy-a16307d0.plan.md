@@ -1,138 +1,109 @@
-<!-- a16307d0-986b-4eba-b40f-26e30e8f1262 1fcf9d9e-d71a-40b5-b38c-b4a2a4376402 -->
-### Slim API-Only Docker + Local Test + CI
+<!-- a16307d0-986b-4eba-b40f-26e30e8f1262 3f5aa6e6-ccef-42fd-be48-158bf11ba2da -->
+# Complete CI/CD Pipeline Setup Plan
 
-#### Goals
-- Build a small, reliable API image (FastAPI + DB + email + scheduler)
-- Remove heavy ML/RAG deps from the image
-- Keep LLM/Ollama external (host-only), not inside the image
-- Test locally with Docker, then add CI (build + lint + test)
+## Overview
+This plan implements a production-ready CI/CD pipeline that automatically tests, builds, and deploys the backend (with LLM support) to GCP VM and the frontend to GCS. Post-deployment scripts run automatically on every deployment with proper error handling and rollback.
 
-#### Changes (files to edit/add)
-- `backend/requirements-server.txt` (new): minimal deps for the API only.
-- `backend/Dockerfile` (edit): install from `requirements-server.txt`, keep multi-stage, non-root, healthcheck, entrypoint.
-- `docker-compose.yml` (confirm): only `db` and `api`; envs sourced from root `.env`; healthchecks; volumes only for data/logs.
-- `backend/docker-entrypoint.sh` (confirm): wait-for-DB loop, run migrations/create tables, then start Uvicorn.
-- `.env` (local): API/db/email vars; no MLflow; no heavy RAG vars.
-- `.github/workflows/ci.yml` (new): lint, type-check, unit tests, and Docker build on push to `main`.
+## Components to Update/Create
 
-#### Minimal content (concise snippets)
-- `backend/requirements-server.txt`
-```text
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-sqlalchemy==2.0.34
-psycopg2-binary==2.9.9
-pydantic==2.9.2
-email-validator==2.1.0
-httpx==0.27.2
-python-dotenv==1.0.1
-apscheduler==3.10.4
-```
+### 1. CI Workflow (`.github/workflows/ci.yml`)
+   - Already tests backend and frontend
+   - Builds both slim and full LLM Docker images
+   - Status: **Needs minor updates** - ensure full LLM build is properly tested
 
-- `backend/Dockerfile` (key edits only)
-```Dockerfile
-FROM python:3.11-slim AS builder
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
-COPY requirements-server.txt ./requirements.txt
-RUN pip install --no-cache-dir --user -r requirements.txt
+### 2. CD Backend Workflow (`.github/workflows/cd-backend.yml`)
+   - **Major updates needed**:
+     - Always use `docker-compose.llm.yml` for LLM support
+     - Add Ollama service verification step before deployment
+     - Add post-deployment script execution in order:
+       1. `seed_real_protocols.py` (runs on every deployment, skips if exists)
+       2. `real_data.py` (initializes/updates protocol data)
+       3. `auto_update_risks.py` (calculates risk scores)
+       4. `7historical_graph.py` (generates historical data)
+       5. `initialize_vector_store.py` (only if LLM/RAG enabled)
+     - Implement rollback mechanism on script failures
+     - Add comprehensive health checks after each script
+     - Improve error handling and logging
 
-FROM python:3.11-slim
-WORKDIR /app
-RUN useradd --create-home --shell /bin/bash appuser && \
-    apt-get update && apt-get install -y --no-install-recommends libpq-dev curl && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /root/.local /home/appuser/.local
-COPY app ./app
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
-ENV PATH=/home/appuser/.local/bin:$PATH
-USER appuser
-EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-CMD ["/app/docker-entrypoint.sh"]
-```
+### 3. CD Frontend Workflow (`.github/workflows/cd-frontend.yml`)
+   - Already builds and deploys to GCS
+   - Status: **May need minor updates** for better error handling
 
-- `.env` (local)
-```text
-ENVIRONMENT=development
-LOG_LEVEL=INFO
-API_PORT=8000
-POSTGRES_USER=defi_user
-POSTGRES_PASSWORD=usersafety
-POSTGRES_DB=defi_risk_assessment
-POSTGRES_PORT=5432
-EMAIL_ALERTS_ENABLED=true
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=you@example.com
-SMTP_PASSWORD=app_password
-EMAIL_FROM=you@example.com
-EMAIL_FROM_NAME=SafeFi Alert System
-# LLM kept external; not baked into image
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=tinyllama
-```
+### 4. Deployment Scripts
+   - Create `.github/scripts/deploy-backend.sh` helper script
+   - Include rollback logic and error handling
+   - Verify Ollama service availability
+   - Execute post-deployment scripts in sequence with error checking
 
-- `.github/workflows/ci.yml` (high level)
-```yaml
-name: CI
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - name: Install deps (server-only)
-        run: |
-          pip install -r backend/requirements-server.txt
-      - name: Lint & Type check
-        run: |
-          pip install ruff mypy
-          ruff check backend/app
-          mypy backend/app --ignore-missing-imports
-      - name: Unit tests
-        run: |
-          pip install pytest
-          pytest -q
-      - name: Docker build api
-        run: |
-          docker build -t safefi-api:ci -f backend/Dockerfile backend
-```
+### 5. Documentation Updates
+   - Update `.github/CI_CD_SETUP.md` with:
+     - Post-deployment script execution details
+     - Ollama service verification steps
+     - Rollback procedures
+     - Troubleshooting guide for common issues
 
-#### Local test steps
-1) From project root: `cp backend/requirements-server.txt backend/requirements.txt` (optional, if Dockerfile copies requirements-server.txt directly, skip).
-2) Ensure `.env` exists at root (values above).
-3) `docker compose down`
-4) `docker compose build --no-cache api`
-5) `docker compose up -d`
-6) `docker compose ps` and `docker compose logs -f api`
-7) Verify: `curl http://localhost:8000/health` and `curl "http://localhost:8000/protocols?limit=5"`.
+## Implementation Details
 
-#### VM deploy (manual, after local success)
-- SSH, `git pull`, ensure `.env` at `/var/lib/postgresql/SafeFi_project1`, then:
-```
-cd /var/lib/postgresql/SafeFi_project1
-sudo docker compose down --volumes --remove-orphans
-sudo docker compose build --no-cache api
-sudo docker compose up -d
-sudo docker compose ps
-sudo docker compose logs -f api
-```
+### Backend Deployment Flow
+1. **Pre-deployment checks**:
+   - Verify Ollama service is running on VM host
+   - Check VM disk space
+   - Verify SSH connectivity
 
-#### Notes
-- Frontend remains in GCS; no change here.
-- If disk space issues occur on the VM, prune Docker and rebuild.
-- LLM can run on host (Ollama) if needed; API calls it via OLLAMA_BASE_URL.
+2. **Deployment**:
+   - Copy files to VM
+   - Build Docker images with LLM support (`USE_FULL_REQS=1`)
+   - Stop existing containers
+   - Start new containers
+   - Wait for health checks
 
+3. **Post-deployment scripts** (in order):
+   ```bash
+   docker compose exec -T api python scripts/seed_real_protocols.py
+   docker compose exec -T api python scripts/real_data.py
+   docker compose exec -T api python scripts/auto_update_risks.py
+   docker compose exec -T api python scripts/7historical_graph.py
+   docker compose exec -T api python scripts/initialize_vector_store.py
+   ```
+
+4. **Verification**:
+   - Health endpoint check
+   - Database connectivity
+   - LLM service availability
+   - Vector store initialization status
+
+5. **Rollback** (on failure):
+   - Stop new containers
+   - Restore previous containers (if backup exists)
+   - Report failure with logs
+
+### Error Handling
+- Each script execution should have timeout (5 minutes per script)
+- Log all script outputs for debugging
+- Verify database state after each script
+- Rollback on any critical failure (scripts, health checks, LLM initialization)
+
+### Ollama Verification
+- Check if Ollama is listening on port 11434
+- Verify `tinyllama` model is available
+- Test connection from container to host Ollama service
+- Provide clear error messages if Ollama is not available
+
+## Files to Modify
+
+1. `.github/workflows/cd-backend.yml` - Add Ollama check, post-deployment scripts, rollback
+2. `.github/workflows/ci.yml` - Minor improvements for LLM build testing
+3. `.github/scripts/deploy-backend.sh` - New helper script for deployment logic
+4. `.github/CI_CD_SETUP.md` - Update documentation
+
+## Dependencies
+
+- GitHub S
 
 ### To-dos
 
-- [ ] Add backend/requirements-server.txt with slim API deps
-- [ ] Edit backend/Dockerfile to install requirements-server.txt
-- [ ] Verify .env and docker-compose.yml (db+api only)
-- [ ] Build and run docker locally; verify health endpoints
-- [ ] Add .github/workflows/ci.yml for lint, tests, docker build
-- [ ] Manual deploy on VM: pull, build, up, verify
+- [ ] Update cd-backend.yml to always deploy with LLM support, add Ollama verification, and include post-deployment script execution with rollback mechanism
+- [ ] Create .github/scripts/deploy-backend.sh helper script with Ollama check, script execution, and rollback logic
+- [ ] Update ci.yml to ensure LLM build testing is comprehensive
+- [ ] Review and improve cd-frontend.yml error handling if needed
+- [ ] Update CI_CD_SETUP.md with post-deployment scripts, Ollama verification, and rollback procedures
