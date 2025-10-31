@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchProtocols } from '../services/api';
 import ProtocolCard from './ProtocolCard';
 import { colors } from '../utils/riskColors';
+import { ProtocolWithRisk } from '../types';
 
 interface ProtocolHeatmapProps {
   onProtocolSelect: (protocolId: string) => void;
@@ -62,7 +63,7 @@ export default function ProtocolHeatmap({ onProtocolSelect }: ProtocolHeatmapPro
   });
 
   // Calculate total TVL from all protocols
-  const totalTvl = protocols.reduce((sum, protocol) => {
+  const totalTvl = protocols.reduce((sum: number, protocol: ProtocolWithRisk) => {
     const tvl = protocol.latest_metrics?.tvl_usd || 0;
     return sum + tvl;
   }, 0);
@@ -102,7 +103,7 @@ export default function ProtocolHeatmap({ onProtocolSelect }: ProtocolHeatmapPro
       </Box>
 
       <Grid container spacing={3}>
-        {sortedProtocols.map((protocol: any) => (
+        {sortedProtocols.map((protocol: ProtocolWithRisk) => (
           <Grid item xs={12} sm={6} md={4} lg={3} key={protocol.id}>
             <ProtocolCard
               protocol={protocol}
