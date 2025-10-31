@@ -188,7 +188,7 @@ jobs:
           build-args: |
             USE_FULL_REQS=1
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
 
       - name: Verify LLM dependencies
         run: |
