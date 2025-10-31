@@ -139,9 +139,14 @@ class RiskCalculatorService:
     
     def __init__(self, experiment_name: str = "risk_scoring") -> None:
         self.experiment_name = experiment_name
-        # Prefer env, else default to local MLflow on 127.0.0.1:5001
-        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000"))
-        mlflow.set_experiment(experiment_name)
+        # Prefer env, else default to file-based MLflow (works without server)
+        mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns")
+        mlflow.set_tracking_uri(mlflow_uri)
+        try:
+            mlflow.set_experiment(experiment_name)
+        except Exception as e:
+            # If MLflow connection fails (e.g., in tests), continue without it
+            logger.warning(f"Could not connect to MLflow: {e}. Continuing without MLflow tracking.")
         self.scaler = StandardScaler()
         self._current_model = None
         self._current_model_version = None
