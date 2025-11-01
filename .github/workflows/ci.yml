@@ -176,7 +176,7 @@ jobs:
           build-args: |
             USE_FULL_REQS=0
           cache-from: type=gha
-          cache-to: type=gha,mode=min
+          # cache-to: type=gha,mode=min
 
       - name: Build backend (full LLM)
         uses: docker/build-push-action@v5
@@ -188,7 +188,7 @@ jobs:
           build-args: |
             USE_FULL_REQS=1
           cache-from: type=gha
-          cache-to: type=gha,mode=min
+          # cache-to: type=gha,mode=min
 
       - name: Verify LLM dependencies
         run: |
