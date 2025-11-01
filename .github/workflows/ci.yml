@@ -172,6 +172,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: false
+          load: true
           tags: safefi-backend:test-slim
           build-args: |
             USE_FULL_REQS=0
@@ -184,6 +185,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: false
+          load: true
           tags: safefi-backend:test-full
           build-args: |
             USE_FULL_REQS=1
